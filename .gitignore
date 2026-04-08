@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+dist/
+release/
+models/*.bin
+.env
+*.log
+.DS_Store
+Thumbs.db
