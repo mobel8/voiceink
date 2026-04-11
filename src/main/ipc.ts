@@ -213,17 +213,22 @@ export function registerIpcHandlers(
 
   // ===== Injection =====
   ipcMain.handle(IPC.INJECT_TEXT, async (_event, text: string) => {
-    // Hide window briefly so the previous app gets focus for paste
+    console.log(`[Injection] Injecting ${text.length} chars: "${text.substring(0, 60)}"`);
     const wasVisible = mainWindow.isVisible();
-    const wasFocused = mainWindow.isFocused();
-    if (wasFocused) {
+
+    // Always hide window before paste — even if not focused, the window may
+    // be on top and intercept the xdotool keypress on Linux/X11
+    if (wasVisible) {
       mainWindow.hide();
-      await new Promise(r => setTimeout(r, 150)); // let OS switch focus
+      await new Promise(r => setTimeout(r, 200)); // let OS restore focus to previous app
     }
+
     await textInjector.injectText(text);
+    console.log('[Injection] Done');
+
     // Restore window after paste
     if (wasVisible) {
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 150));
       mainWindow.showInactive(); // show without stealing focus
     }
   });
@@ -323,12 +328,13 @@ export function registerIpcHandlers(
       if (!savedBounds) savedBounds = mainWindow.getBounds();
       const display = screen.getPrimaryDisplay();
       const { width: screenW } = display.workAreaSize;
-      const cw = (width || 200) + 20;
-      const ch = (height || 52) + 10;
-      mainWindow.setMinimumSize(100, 30);
+      // Renderer is source of truth for box size (orb + halo headroom already included)
+      const cw = width  || 132;
+      const ch = height || 132;
+      mainWindow.setMinimumSize(60, 60);
       mainWindow.setResizable(false);
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
-      mainWindow.setBounds({ x: Math.round(screenW / 2 - cw / 2), y: 16, width: cw, height: ch });
+      mainWindow.setBounds({ x: Math.round(screenW / 2 - cw / 2), y: 18, width: cw, height: ch });
     } else {
       mainWindow.setAlwaysOnTop(false);
       mainWindow.setMinimumSize(400, 600);

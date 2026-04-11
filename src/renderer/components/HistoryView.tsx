@@ -1,222 +1,261 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Search, Trash2, Download, Tag, Copy, Clock, FileAudio, Mic } from 'lucide-react';
+import { Search, Trash2, Download, Tag, Copy, Clock, FileAudio, Mic, X } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import type { HistoryEntry, ExportFormat } from '@shared/types';
 import { MODE_LABELS } from '../lib/constants';
 
+const formatDate = (ts: number) =>
+  new Date(ts).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+const formatDuration = (s: number) =>
+  s < 60 ? `${s.toFixed(0)}s` : `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
+
 export function HistoryView() {
   const { history, setHistory } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [query,         setQuery]         = useState('');
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
-  const [tagInput, setTagInput] = useState('');
+  const [tagInput,      setTagInput]      = useState('');
 
-  const loadHistory = useCallback(async () => {
+  const load = useCallback(async () => {
     if (window.voiceink) {
-      const entries = await window.voiceink.getHistory(
-        searchQuery ? { search: searchQuery } : undefined
-      );
+      const entries = await window.voiceink.getHistory(query ? { search: query } : undefined);
       setHistory(entries);
     }
-  }, [searchQuery, setHistory]);
+  }, [query, setHistory]);
 
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+  useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (id: string) => {
-    if (window.voiceink) {
-      await window.voiceink.deleteHistory(id);
-      if (selectedEntry?.id === id) setSelectedEntry(null);
-      loadHistory();
-    }
+    if (!window.voiceink) return;
+    await window.voiceink.deleteHistory(id);
+    if (selectedEntry?.id === id) setSelectedEntry(null);
+    load();
   };
 
-  const handleExport = async (id: string, format: ExportFormat) => {
-    if (window.voiceink) {
-      await window.voiceink.exportHistory(id, format);
-    }
+  const handleExport = async (id: string, fmt: ExportFormat) => {
+    if (window.voiceink) await window.voiceink.exportHistory(id, fmt);
   };
 
   const handleAddTag = async (id: string) => {
     if (window.voiceink && tagInput.trim()) {
       await window.voiceink.addTag(id, tagInput.trim());
       setTagInput('');
-      loadHistory();
+      load();
     }
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (seconds < 60) return `${seconds.toFixed(0)}s`;
-    const min = Math.floor(seconds / 60);
-    const sec = Math.floor(seconds % 60);
-    return `${min}m ${sec}s`;
-  };
-
   return (
-    <div className="flex flex-col h-full animate-fade-in">
+    <div
+      className="flex flex-col h-full animate-fade-in"
+      style={{ background: 'var(--gradient-surface)' }}
+    >
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[var(--bg-secondary)]">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)] mb-3">Historique</h1>
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+      <div
+        style={{
+          padding: '14px 14px 10px',
+          borderBottom: '1px solid var(--border-subtle)',
+          flexShrink: 0,
+        }}
+      >
+        <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>
+          Historique
+        </h1>
+        <div style={{ position: 'relative' }}>
+          <Search
+            size={13}
+            style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-muted)', pointerEvents: 'none',
+            }}
+          />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-[var(--accent)] outline-none"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher…"
+            className="input-base"
+            style={{ paddingLeft: 30 }}
           />
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Body */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
         {/* List */}
-        <div className="w-full flex-1 overflow-y-auto">
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-              <Clock size={32} className="mb-2 opacity-50" />
-              <p className="text-sm">Aucun historique</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: 'var(--text-muted)' }}>
+              <Clock size={28} style={{ opacity: 0.3 }} />
+              <p style={{ fontSize: 12 }}>Aucun historique</p>
             </div>
           ) : (
-            <div className="divide-y divide-[var(--bg-secondary)]">
-              {history.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={`px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]
-                    ${selectedEntry?.id === entry.id ? 'bg-[var(--bg-secondary)] border-l-2 border-[var(--accent)]' : ''}`}
-                  onClick={() => setSelectedEntry(entry)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[var(--text-primary)] truncate">
-                        {entry.processedText || entry.originalText}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-[var(--text-muted)]">{formatDate(entry.timestamp)}</span>
-                        <span className="text-xs text-[var(--text-muted)]">-</span>
-                        <span className="text-xs text-[var(--accent)]">
-                          {MODE_LABELS[entry.mode] || entry.mode}
-                        </span>
-                        {entry.source === 'file' && (
-                          <FileAudio size={10} className="text-[var(--text-muted)]" />
-                        )}
-                        {entry.source === 'dictation' && (
-                          <Mic size={10} className="text-[var(--text-muted)]" />
+            <div>
+              {history.map((entry) => {
+                const active = selectedEntry?.id === entry.id;
+                return (
+                  <div
+                    key={entry.id}
+                    onClick={() => setSelectedEntry(active ? null : entry)}
+                    style={{
+                      padding: '10px 14px', cursor: 'pointer',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                      background: active ? 'var(--accent-subtle)' : 'transparent',
+                      transition: 'all 0.12s ease',
+                    }}
+                    onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--hover-bg)'; }}
+                    onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Main text */}
+                        <p style={{
+                          fontSize: 12, color: 'var(--text-primary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          lineHeight: 1.5,
+                        }}>
+                          {entry.processedText || entry.originalText}
+                        </p>
+
+                        {/* Meta */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatDate(entry.timestamp)}</span>
+                          <span style={{
+                            fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 4,
+                            background: 'var(--accent-subtle)', color: 'var(--accent)',
+                            border: '1px solid var(--pill-active-border)',
+                          }}>
+                            {MODE_LABELS[entry.mode] || entry.mode}
+                          </span>
+                          {entry.source === 'file'      && <FileAudio size={9} style={{ color: 'var(--text-muted)' }} />}
+                          {entry.source === 'dictation' && <Mic        size={9} style={{ color: 'var(--text-muted)' }} />}
+                        </div>
+
+                        {/* Tags */}
+                        {entry.tags.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+                            {entry.tags.map((tag) => (
+                              <span key={tag} style={{
+                                fontSize: 9.5, padding: '1px 6px', borderRadius: 4,
+                                background: 'rgba(124,106,247,0.1)',
+                                border: '1px solid rgba(124,106,247,0.2)',
+                                color: 'var(--accent)',
+                              }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      {entry.tags.length > 0 && (
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {entry.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]/20 text-[var(--accent)]"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleCopy(entry.processedText || entry.originalText); }}
-                        className="p-1 rounded hover:bg-[var(--hover-bg)] transition-colors"
-                        title="Copier"
-                      >
-                        <Copy size={12} className="text-[var(--text-muted)]" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }}
-                        className="p-1 rounded hover:bg-red-500/20 transition-colors"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={12} className="text-[var(--text-muted)] hover:text-red-400" />
-                      </button>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(entry.processedText || entry.originalText); }}
+                          className="icon-btn"
+                          style={{ width: 24, height: 24, borderRadius: 5 }}
+                          title="Copier"
+                        >
+                          <Copy size={11} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }}
+                          className="icon-btn"
+                          style={{ width: 24, height: 24, borderRadius: 5 }}
+                          title="Supprimer"
+                          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'rgba(244,63,94,0.1)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = ''; e.currentTarget.style.background = ''; }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Detail Panel */}
+        {/* Detail panel */}
         {selectedEntry && (
-          <div className="w-64 border-l border-[var(--bg-secondary)] overflow-y-auto p-4 shrink-0">
-            <h3 className="text-xs font-medium text-[var(--accent)] mb-2">Détails</h3>
+          <div
+            className="animate-fade-in"
+            style={{
+              width: 220, overflowY: 'auto', flexShrink: 0,
+              borderLeft: '1px solid var(--border-subtle)',
+              background: 'var(--bg-surface)',
+              padding: '12px',
+            }}
+          >
+            {/* Panel header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Détails</p>
+              <button className="icon-btn" style={{ width: 22, height: 22, borderRadius: 5 }} onClick={() => setSelectedEntry(null)}>
+                <X size={11} />
+              </button>
+            </div>
 
-            <div className="space-y-3">
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Date</span>
-                <p className="text-xs text-[var(--text-primary)]">{formatDate(selectedEntry.timestamp)}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Mode</span>
-                <p className="text-xs text-[var(--text-primary)]">{MODE_LABELS[selectedEntry.mode]}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Langue</span>
-                <p className="text-xs text-[var(--text-primary)]">{selectedEntry.language}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Durée</span>
-                <p className="text-xs text-[var(--text-primary)]">{formatDuration(selectedEntry.duration)}</p>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Meta fields */}
+              {[
+                { label: 'Date',   value: formatDate(selectedEntry.timestamp) },
+                { label: 'Mode',   value: MODE_LABELS[selectedEntry.mode] || selectedEntry.mode },
+                { label: 'Langue', value: selectedEntry.language },
+                { label: 'Durée',  value: formatDuration(selectedEntry.duration) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>{label}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-primary)' }}>{value}</p>
+                </div>
+              ))}
 
               {/* Tags */}
               <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Tags</span>
-                <div className="flex gap-1 flex-wrap mt-1">
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>Tags</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
                   {selectedEntry.tags.map((tag) => (
-                    <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent)]/20 text-[var(--accent)]">
-                      {tag}
-                    </span>
+                    <span key={tag} style={{
+                      fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                      background: 'var(--accent-subtle)', border: '1px solid var(--pill-active-border)',
+                      color: 'var(--accent)',
+                    }}>{tag}</span>
                   ))}
                 </div>
-                <div className="flex gap-1 mt-2">
+                <div style={{ display: 'flex', gap: 4 }}>
                   <input
-                    type="text"
-                    value={tagInput}
+                    type="text" value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddTag(selectedEntry.id)}
-                    placeholder="Ajouter tag..."
-                    className="flex-1 px-2 py-1 text-[10px] rounded bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] outline-none"
+                    placeholder="Ajouter…"
+                    className="input-base"
+                    style={{ fontSize: 10, padding: '4px 8px', flex: 1 }}
                   />
-                  <button
-                    onClick={() => handleAddTag(selectedEntry.id)}
-                    className="px-2 py-1 text-[10px] rounded bg-[var(--accent)]/20 text-[var(--accent)] hover:bg-[var(--accent)]/30"
-                  >
+                  <button onClick={() => handleAddTag(selectedEntry.id)} className="btn-accent" style={{ padding: '4px 8px', fontSize: 10 }}>
                     <Tag size={10} />
                   </button>
                 </div>
               </div>
 
-              {/* Text */}
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Texte traité</span>
-                <p className="text-xs text-[var(--text-primary)] mt-1 whitespace-pre-wrap leading-relaxed">
-                  {selectedEntry.processedText}
-                </p>
-              </div>
-
-              {selectedEntry.originalText !== selectedEntry.processedText && (
+              {/* Processed text */}
+              {selectedEntry.processedText && (
                 <div>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">Texte original</span>
-                  <p className="text-xs text-[var(--text-secondary)] mt-1 whitespace-pre-wrap leading-relaxed">
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Texte traité</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    {selectedEntry.processedText}
+                  </p>
+                </div>
+              )}
+
+              {/* Original if different */}
+              {selectedEntry.originalText && selectedEntry.originalText !== selectedEntry.processedText && (
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Original</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {selectedEntry.originalText}
                   </p>
                 </div>
@@ -224,15 +263,16 @@ export function HistoryView() {
 
               {/* Export */}
               <div>
-                <span className="text-[10px] text-[var(--text-muted)] uppercase">Exporter</span>
-                <div className="flex gap-1 mt-1">
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>Exporter</p>
+                <div style={{ display: 'flex', gap: 4 }}>
                   {(['txt', 'srt', 'json'] as ExportFormat[]).map((fmt) => (
                     <button
                       key={fmt}
                       onClick={() => handleExport(selectedEntry.id, fmt)}
-                      className="flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors"
+                      className="btn-ghost"
+                      style={{ flex: 1, justifyContent: 'center', padding: '4px 4px', fontSize: 9.5 }}
                     >
-                      <Download size={8} />
+                      <Download size={9} />
                       {fmt.toUpperCase()}
                     </button>
                   ))}

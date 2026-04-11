@@ -50,23 +50,6 @@ export class ShortcutManager {
       }
     }
 
-    // Push-to-talk shortcut
-    if (shortcuts.pushToTalk) {
-      try {
-        const ok = globalShortcut.register(shortcuts.pushToTalk, () => {
-          console.log('[Shortcut] Push-to-talk triggered via globalShortcut');
-          this.mainWindow.webContents.send(IPC.APP_TOGGLE_RECORDING);
-        });
-        if (ok) {
-          console.log(`[Shortcut] Registered push-to-talk: ${shortcuts.pushToTalk}`);
-        } else {
-          console.warn(`[Shortcut] Failed to register push-to-talk: ${shortcuts.pushToTalk}`);
-        }
-      } catch (err) {
-        console.error(`[Shortcut] Error registering push-to-talk (${shortcuts.pushToTalk}):`, err);
-      }
-    }
-
     console.log('[Shortcut] Registration complete. Note: globalShortcut may not work on WSL2 — in-window fallback is active.');
   }
 

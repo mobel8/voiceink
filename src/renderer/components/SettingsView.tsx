@@ -4,91 +4,154 @@ import { useStore } from '../stores/useStore';
 import type { AppSettings, STTModel, STTProvider, LLMProvider, PrivacyMode } from '@shared/types';
 
 const STT_MODELS: { value: STTModel; label: string; size: string }[] = [
-  { value: 'tiny', label: 'Tiny', size: '~75 MB' },
-  { value: 'base', label: 'Base', size: '~142 MB' },
-  { value: 'small', label: 'Small', size: '~466 MB' },
-  { value: 'medium', label: 'Medium', size: '~1.5 GB' },
-  { value: 'large', label: 'Large', size: '~3.1 GB' },
+  { value: 'tiny',   label: 'Tiny',   size: '75 MB'  },
+  { value: 'base',   label: 'Base',   size: '142 MB' },
+  { value: 'small',  label: 'Small',  size: '466 MB' },
+  { value: 'medium', label: 'Medium', size: '1.5 GB' },
+  { value: 'large',  label: 'Large',  size: '3.1 GB' },
 ];
 
-const STT_PROVIDERS: { value: STTProvider; label: string }[] = [
-  { value: 'groq', label: 'Groq Whisper (instant, gratuit)' },
-  { value: 'local', label: 'Whisper local' },
-  { value: 'openai', label: 'OpenAI Whisper (cloud)' },
-  { value: 'glm', label: 'GLM Flash Cloud' },
+const STT_PROVIDERS: { value: STTProvider; label: string; desc: string }[] = [
+  { value: 'groq',   label: 'Groq',    desc: 'Whisper large-v3 — ultra rapide, gratuit'   },
+  { value: 'local',  label: 'Local',   desc: 'Whisper.cpp — 100% offline, CPU/GPU'         },
+  { value: 'openai', label: 'OpenAI',  desc: 'Whisper API — haute qualité, cloud'          },
+  { value: 'glm',    label: 'GLM',     desc: 'Zhipu AI — utilise la clé LLM'              },
 ];
 
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: 'none', label: 'Aucun (texte brut)' },
-  { value: 'ollama', label: 'Ollama (local)' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'glm', label: 'GLM Flash (Zhipu AI)' },
+const LLM_PROVIDERS: { value: LLMProvider; label: string; desc: string }[] = [
+  { value: 'none',      label: 'Aucun',      desc: 'Texte brut sans post-traitement'          },
+  { value: 'ollama',    label: 'Ollama',      desc: 'LLM local — llama, mistral, gemma…'       },
+  { value: 'openai',    label: 'OpenAI',      desc: 'GPT-4o, GPT-4-turbo…'                    },
+  { value: 'anthropic', label: 'Anthropic',   desc: 'Claude Sonnet, Haiku…'                   },
+  { value: 'glm',       label: 'GLM Flash',   desc: 'Zhipu AI — rapide et économique'         },
 ];
 
 type SettingsTab = 'audio' | 'stt' | 'llm' | 'shortcuts' | 'privacy' | 'ui';
-
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'audio', label: 'Audio' },
-  { id: 'stt', label: 'STT' },
-  { id: 'llm', label: 'LLM' },
-  { id: 'shortcuts', label: 'Raccourcis' },
-  { id: 'privacy', label: 'Confidentialité' },
-  { id: 'ui', label: 'Interface' },
+  { id: 'audio',    label: 'Audio'         },
+  { id: 'stt',      label: 'STT'           },
+  { id: 'llm',      label: 'LLM'           },
+  { id: 'shortcuts',label: 'Raccourcis'    },
+  { id: 'privacy',  label: 'Confidentialité'},
+  { id: 'ui',       label: 'Interface'     },
 ];
 
+/* ─── Shared field wrapper ─── */
+const Field = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
+  <div>
+    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 5 }}>
+      {label}
+    </label>
+    {children}
+    {hint && <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</p>}
+  </div>
+);
+
+/* ─── Toggle ─── */
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
-      role="switch"
-      aria-checked={value}
-      aria-label={label}
+      role="switch" aria-checked={value} aria-label={label}
       onClick={() => onChange(!value)}
-      className="w-10 h-5 rounded-full transition-colors"
-      style={{ background: value ? 'var(--accent)' : 'var(--border)' }}
+      style={{
+        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
+        background: value ? 'var(--accent)' : 'var(--bg-tertiary)',
+        transition: 'background 0.2s ease', position: 'relative', flexShrink: 0,
+        outline: 'none',
+      }}
     >
-      <div className={`w-4 h-4 rounded-full bg-white transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      <div
+        style={{
+          position: 'absolute', top: 2, left: value ? 18 : 2,
+          width: 16, height: 16, borderRadius: '50%',
+          background: 'white', transition: 'left 0.2s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        }}
+      />
     </button>
   );
 }
 
+/* ─── Password input ─── */
+function ApiKeyInput({
+  value, onChange, placeholder, keyId, showKeys, toggleKey,
+}: {
+  value: string; onChange: (v: string) => void;
+  placeholder: string; keyId: string;
+  showKeys: Record<string, boolean>;
+  toggleKey: (k: string) => void;
+}) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={showKeys[keyId] ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="input-base"
+        style={{ paddingRight: 36 }}
+      />
+      <button
+        onClick={() => toggleKey(keyId)}
+        style={{
+          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
+        }}
+      >
+        {showKeys[keyId] ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+    </div>
+  );
+}
+
+/* ─── Section header ─── */
+const SectionHeader = ({ children }: { children: React.ReactNode }) => (
+  <p style={{
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+    textTransform: 'uppercase', color: 'var(--text-muted)',
+    marginBottom: 10, marginTop: 4,
+  }}>
+    {children}
+  </p>
+);
+
+/* ─── Row with label + control ─── */
+const Row = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+    <div>
+      <p style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>{label}</p>
+      {desc && <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{desc}</p>}
+    </div>
+    {children}
+  </div>
+);
+
 export function SettingsView() {
   const { settings, setSettings, modelDownloadProgress, addToast, theme, setTheme } = useStore();
-  const [localSettings, setLocalSettings] = useState<AppSettings | null>(null);
-  const [downloading, setDownloading] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<SettingsTab>('audio');
+  const [local, setLocal]      = useState<AppSettings | null>(null);
+  const [downloading, setDl]   = useState(false);
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [tab, setTab]          = useState<SettingsTab>('audio');
 
   useEffect(() => {
-    if (settings) {
-      setLocalSettings({ ...settings });
-    }
+    if (settings) setLocal({ ...settings });
   }, [settings]);
 
-  if (!localSettings) {
+  if (!local) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="animate-spin text-[var(--accent)]" size={24} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Loader2 size={22} style={{ color: 'var(--accent)' }} className="spin-smooth" />
       </div>
     );
   }
 
-  const updateField = (section: string, field: string, value: any) => {
-    setLocalSettings((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [section]: {
-          ...(prev as any)[section],
-          [field]: value,
-        },
-      };
-    });
-  };
+  const set = (section: string, field: string, value: any) =>
+    setLocal((prev) => prev ? { ...prev, [section]: { ...(prev as any)[section], [field]: value } } : prev);
 
   const handleSave = async () => {
-    if (localSettings && window.voiceink) {
-      const updated = await window.voiceink.setSettings(localSettings);
+    if (local && window.voiceink) {
+      const updated = await window.voiceink.setSettings(local);
       setSettings(updated);
       addToast({ type: 'success', message: 'Paramètres sauvegardés' });
     }
@@ -96,435 +159,409 @@ export function SettingsView() {
 
   const handleReset = async () => {
     if (window.voiceink) {
-      const defaults = await window.voiceink.resetSettings();
-      setLocalSettings(defaults);
-      setSettings(defaults);
+      const d = await window.voiceink.resetSettings();
+      setLocal(d); setSettings(d);
       addToast({ type: 'info', message: 'Paramètres réinitialisés' });
     }
   };
 
-  const handleDownloadModel = async (model: STTModel) => {
-    if (window.voiceink) {
-      setDownloading(true);
-      try {
-        await window.voiceink.downloadModel(model);
-        addToast({ type: 'success', message: `Modèle ${model} téléchargé` });
-      } catch (err) {
-        addToast({ type: 'error', message: 'Erreur de téléchargement' });
-      }
-      setDownloading(false);
+  const handleDownload = async (model: STTModel) => {
+    if (!window.voiceink) return;
+    setDl(true);
+    try {
+      await window.voiceink.downloadModel(model);
+      addToast({ type: 'success', message: `Modèle ${model} téléchargé` });
+    } catch {
+      addToast({ type: 'error', message: 'Erreur de téléchargement' });
     }
+    setDl(false);
   };
 
-  const toggleApiKeyVisibility = (key: string) => {
-    setShowApiKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+  const toggleKey = (k: string) => setShowKeys((p) => ({ ...p, [k]: !p[k] }));
 
   return (
-    <div className="flex flex-col h-full animate-fade-in">
+    <div
+      className="flex flex-col h-full animate-fade-in"
+      style={{ background: 'var(--gradient-surface)' }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-[var(--bg-secondary)]">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Paramètres</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-          >
-            <RotateCcw size={12} />
-            Réinitialiser
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px 10px',
+          borderBottom: '1px solid var(--border-subtle)',
+          flexShrink: 0,
+        }}
+      >
+        <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+          Paramètres
+        </h1>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={handleReset} className="btn-ghost">
+            <RotateCcw size={11} /> Réinitialiser
           </button>
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            <Save size={12} />
-            Sauvegarder
+          <button onClick={handleSave} className="btn-accent">
+            <Save size={11} /> Sauvegarder
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex px-6 border-b border-[var(--bg-secondary)] gap-0.5 overflow-x-auto" role="tablist">
-        {TABS.map((tab) => (
+      <div
+        className="scrollbar-hide"
+        style={{
+          display: 'flex', gap: 2, padding: '0 12px',
+          borderBottom: '1px solid var(--border-subtle)',
+          overflowX: 'auto', flexShrink: 0,
+        }}
+        role="tablist"
+      >
+        {TABS.map((t) => (
           <button
-            key={tab.id}
+            key={t.id}
             role="tab"
-            aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'text-[var(--accent)] border-[var(--accent)]'
-                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]'
-            }`}
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '8px 10px',
+              fontSize: 11, fontWeight: tab === t.id ? 600 : 500,
+              whiteSpace: 'nowrap',
+              borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+              color: tab === t.id ? 'var(--accent)' : 'var(--text-muted)',
+              background: 'transparent', border: 'none',
+              borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+              cursor: 'pointer', transition: 'all 0.15s ease',
+              marginBottom: -1,
+            }}
           >
-            {tab.label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4" role="tabpanel">
+      {/* Content */}
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '16px' }}
+        role="tabpanel"
+      >
 
-        {/* === Audio === */}
-        {activeTab === 'audio' && (
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Sensibilité du micro</label>
+        {/* ── Audio ── */}
+        {tab === 'audio' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <SectionHeader>Capture</SectionHeader>
+            <Field label="Sensibilité du microphone">
               <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={localSettings.audio.sensitivity}
-                onChange={(e) => updateField('audio', 'sensitivity', parseFloat(e.target.value))}
-                className="w-full accent-[#6c5ce7]"
+                type="range" min="0" max="1" step="0.05"
+                value={local.audio.sensitivity}
+                onChange={(e) => set('audio', 'sensitivity', parseFloat(e.target.value))}
+                style={{ width: '100%' }}
               />
-              <span className="text-xs text-[var(--text-muted)]">{Math.round(localSettings.audio.sensitivity * 100)}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-[var(--text-secondary)]">Réduction de bruit</label>
-              <Toggle value={localSettings.audio.noiseReduction} onChange={(v) => updateField('audio', 'noiseReduction', v)} label="Réduction de bruit" />
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-[var(--text-secondary)]">Gain automatique</label>
-              <Toggle value={localSettings.audio.autoGain} onChange={(v) => updateField('audio', 'autoGain', v)} label="Gain automatique" />
-            </div>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                {Math.round(local.audio.sensitivity * 100)}%
+              </span>
+            </Field>
+            <SectionHeader>Traitement</SectionHeader>
+            <Row label="Réduction de bruit" desc="Filtre le bruit ambiant">
+              <Toggle value={local.audio.noiseReduction} onChange={(v) => set('audio', 'noiseReduction', v)} label="Réduction de bruit" />
+            </Row>
+            <Row label="Gain automatique" desc="Ajuste le volume automatiquement">
+              <Toggle value={local.audio.autoGain} onChange={(v) => set('audio', 'autoGain', v)} label="Gain automatique" />
+            </Row>
           </div>
         )}
 
-        {/* === STT Model === */}
-        {activeTab === 'stt' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Fournisseur STT</label>
-              <select
-                value={localSettings.stt.provider}
-                onChange={(e) => updateField('stt', 'provider', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-              >
-                {STT_PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-              {localSettings.stt.provider === 'groq' && (
-                <div className="mt-2">
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Cle API Groq (gratuite sur console.groq.com)</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKeys.groq ? 'text' : 'password'}
-                      value={localSettings.stt.groqApiKey || ''}
-                      onChange={(e) => updateField('stt', 'groqApiKey', e.target.value)}
-                      className="w-full px-3 py-2 pr-10 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                      placeholder="gsk_..."
-                    />
-                    <button
-                      onClick={() => toggleApiKeyVisibility('groq')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    >
-                      {showApiKeys.groq ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--accent)] mt-1">Whisper large-v3-turbo — transcription en &lt;1 seconde</p>
-                </div>
-              )}
-              {localSettings.stt.provider === 'glm' && (
-                <p className="text-xs text-[var(--text-muted)] mt-1">Utilise la cle API GLM configuree dans l'onglet LLM</p>
-              )}
-            </div>
-            {localSettings.stt.provider === 'local' && STT_MODELS.map((model) => (
-              <div
-                key={model.value}
-                className={`flex items-center justify-between p-3 rounded-lg border transition-colors cursor-pointer
-                  ${localSettings.stt.localModel === model.value
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--hover-bg)]'}`}
-                onClick={() => updateField('stt', 'localModel', model.value)}
-              >
-                <div>
-                  <span className="text-sm text-[var(--text-primary)]">{model.label}</span>
-                  <span className="text-xs text-[var(--text-muted)] ml-2">{model.size}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {localSettings.stt.localModel === model.value && (
-                    <Check size={14} className="text-[var(--accent)]" />
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDownloadModel(model.value); }}
-                    disabled={downloading}
-                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--hover-bg)] transition-colors"
-                  >
-                    {downloading ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                    {downloading && modelDownloadProgress > 0 ? `${modelDownloadProgress}%` : 'Télécharger'}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {localSettings.stt.provider === 'local' && (
-              <div className="flex items-center justify-between mt-3">
-                <label className="text-xs text-[var(--text-secondary)]">Utiliser GPU</label>
-                <Toggle value={localSettings.stt.gpuEnabled} onChange={(v) => updateField('stt', 'gpuEnabled', v)} label="Utiliser GPU" />
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── STT ── */}
+        {tab === 'stt' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <SectionHeader>Fournisseur STT</SectionHeader>
 
-        {/* === LLM === */}
-        {activeTab === 'llm' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Fournisseur</label>
-              <select
-                value={localSettings.llm.provider}
-                onChange={(e) => updateField('llm', 'provider', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-              >
-                {LLM_PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {localSettings.llm.provider === 'ollama' && (
-              <>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">URL Ollama</label>
-                  <input
-                    type="text"
-                    value={localSettings.llm.ollamaUrl}
-                    onChange={(e) => updateField('llm', 'ollamaUrl', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Modèle Ollama</label>
-                  <input
-                    type="text"
-                    value={localSettings.llm.ollamaModel}
-                    onChange={(e) => updateField('llm', 'ollamaModel', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                    placeholder="mistral, llama3, etc."
-                  />
-                </div>
-              </>
-            )}
-
-            {localSettings.llm.provider === 'openai' && (
-              <>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Clé API OpenAI</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKeys.openai ? 'text' : 'password'}
-                      value={localSettings.llm.openaiApiKey}
-                      onChange={(e) => updateField('llm', 'openaiApiKey', e.target.value)}
-                      className="w-full px-3 py-2 pr-10 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                      placeholder="sk-..."
-                    />
-                    <button
-                      onClick={() => toggleApiKeyVisibility('openai')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    >
-                      {showApiKeys.openai ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Modèle</label>
-                  <input
-                    type="text"
-                    value={localSettings.llm.openaiModel}
-                    onChange={(e) => updateField('llm', 'openaiModel', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                  />
-                </div>
-              </>
-            )}
-
-            {localSettings.llm.provider === 'anthropic' && (
-              <>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Clé API Anthropic</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKeys.anthropic ? 'text' : 'password'}
-                      value={localSettings.llm.anthropicApiKey}
-                      onChange={(e) => updateField('llm', 'anthropicApiKey', e.target.value)}
-                      className="w-full px-3 py-2 pr-10 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                      placeholder="sk-ant-..."
-                    />
-                    <button
-                      onClick={() => toggleApiKeyVisibility('anthropic')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    >
-                      {showApiKeys.anthropic ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Modèle</label>
-                  <input
-                    type="text"
-                    value={localSettings.llm.anthropicModel}
-                    onChange={(e) => updateField('llm', 'anthropicModel', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                  />
-                </div>
-              </>
-            )}
-
-            {localSettings.llm.provider === 'glm' && (
-              <>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Clé API GLM (Zhipu AI)</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKeys.glm ? 'text' : 'password'}
-                      value={localSettings.llm.glmApiKey}
-                      onChange={(e) => updateField('llm', 'glmApiKey', e.target.value)}
-                      className="w-full px-3 py-2 pr-10 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                      placeholder="votre-clé-api..."
-                    />
-                    <button
-                      onClick={() => toggleApiKeyVisibility('glm')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    >
-                      {showApiKeys.glm ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--text-secondary)] mb-1 block">Modèle</label>
-                  <input
-                    type="text"
-                    value={localSettings.llm.glmModel}
-                    onChange={(e) => updateField('llm', 'glmModel', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none"
-                    placeholder="glm-4-flash"
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Température</label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={localSettings.llm.temperature}
-                onChange={(e) => updateField('llm', 'temperature', parseFloat(e.target.value))}
-                className="w-full accent-[#6c5ce7]"
-              />
-              <span className="text-xs text-[var(--text-muted)]">{localSettings.llm.temperature.toFixed(2)}</span>
-            </div>
-
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Prompt personnalisé</label>
-              <textarea
-                value={localSettings.llm.customPrompt}
-                onChange={(e) => updateField('llm', 'customPrompt', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none resize-none h-20"
-                placeholder="Entrez un prompt système personnalisé..."
-              />
-            </div>
-          </div>
-        )}
-
-        {/* === Shortcuts === */}
-        {activeTab === 'shortcuts' && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Démarrer/Arrêter la dictée</label>
-              <input
-                type="text"
-                value={localSettings.shortcuts.toggleRecording}
-                onChange={(e) => updateField('shortcuts', 'toggleRecording', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none font-mono"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Push-to-talk</label>
-              <input
-                type="text"
-                value={localSettings.shortcuts.pushToTalk}
-                onChange={(e) => updateField('shortcuts', 'pushToTalk', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:border-[var(--accent)] outline-none font-mono"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* === Privacy === */}
-        {activeTab === 'privacy' && (
-          <div className="space-y-2">
-            {(['local', 'hybrid', 'cloud'] as PrivacyMode[]).map((mode) => (
-              <div
-                key={mode}
-                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors
-                  ${localSettings.privacy === mode
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--hover-bg)]'}`}
-                onClick={() => setLocalSettings((prev) => prev ? { ...prev, privacy: mode } : prev)}
-              >
-                <div className={`w-3 h-3 rounded-full border-2 ${localSettings.privacy === mode ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[#55556a]'}`} />
-                <div>
-                  <span className="text-sm text-[var(--text-primary)] capitalize">{mode === 'local' ? '100% Local' : mode === 'hybrid' ? 'Hybride' : 'Cloud'}</span>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {mode === 'local' && 'Aucune donnée envoyée en ligne'}
-                    {mode === 'hybrid' && 'STT local, LLM cloud si configuré'}
-                    {mode === 'cloud' && 'STT et LLM cloud pour la meilleure qualité'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* === UI === */}
-        {activeTab === 'ui' && (
-          <div className="space-y-4">
-            {/* Theme selector */}
-            <div>
-              <label className="text-xs mb-2 block" style={{ color: 'var(--text-secondary)' }}>Theme</label>
-              <div className="flex gap-2">
-                {([{ id: 'dark', label: 'Sombre' }, { id: 'light', label: 'Clair' }] as const).map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={async () => {
-                      setTheme(t.id);
-                      updateField('ui', 'theme', t.id);
-                      // Auto-save theme immediately so it persists without clicking Save
-                      if (localSettings && window.voiceink) {
-                        const updated = { ...localSettings, ui: { ...localSettings.ui, theme: t.id } };
-                        await window.voiceink.setSettings(updated);
-                      }
-                    }}
-                    className="flex-1 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all"
+            {/* Provider cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {STT_PROVIDERS.map((p) => {
+                const active = local.stt.provider === p.value;
+                return (
+                  <div
+                    key={p.value}
+                    onClick={() => set('stt', 'provider', p.value)}
                     style={{
-                      borderColor: theme === t.id ? 'var(--accent)' : 'var(--border)',
-                      background: theme === t.id ? 'var(--pill-active-bg)' : 'var(--bg-secondary)',
-                      color: theme === t.id ? 'var(--accent)' : 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                      border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
+                      background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    {t.id === 'dark' ? '🌙 ' : '☀️ '}{t.label}
-                  </button>
-                ))}
-              </div>
+                    <div
+                      style={{
+                        width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                        border: `2px solid ${active ? 'var(--accent)' : 'var(--text-muted)'}`,
+                        background: active ? 'var(--accent)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{p.label}</p>
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{p.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>Minimiser dans le tray</label>
-              <Toggle value={localSettings.ui.minimizeToTray} onChange={(v) => updateField('ui', 'minimizeToTray', v)} label="Minimiser dans le tray" />
+            {/* Groq key */}
+            {local.stt.provider === 'groq' && (
+              <Field label="Clé API Groq" hint="Gratuite sur console.groq.com">
+                <ApiKeyInput
+                  value={local.stt.groqApiKey || ''} onChange={(v) => set('stt', 'groqApiKey', v)}
+                  placeholder="gsk_..." keyId="groq" showKeys={showKeys} toggleKey={toggleKey}
+                />
+              </Field>
+            )}
+
+            {/* OpenAI STT key */}
+            {local.stt.provider === 'openai' && (
+              <Field label="Clé API OpenAI">
+                <ApiKeyInput
+                  value={local.stt.openaiApiKey || ''} onChange={(v) => set('stt', 'openaiApiKey', v)}
+                  placeholder="sk-..." keyId="stt_openai" showKeys={showKeys} toggleKey={toggleKey}
+                />
+              </Field>
+            )}
+
+            {/* Local models */}
+            {local.stt.provider === 'local' && (
+              <>
+                <SectionHeader>Modèle Whisper</SectionHeader>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {STT_MODELS.map((m) => {
+                    const active = local.stt.localModel === m.value;
+                    return (
+                      <div
+                        key={m.value}
+                        onClick={() => set('stt', 'localModel', m.value)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
+                          border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
+                          background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {active && <Check size={11} style={{ color: 'var(--accent)' }} />}
+                          <span style={{ fontSize: 12, fontWeight: 500, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{m.label}</span>
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.size}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDownload(m.value); }}
+                          disabled={downloading}
+                          className="btn-ghost"
+                          style={{ padding: '3px 8px', fontSize: 10 }}
+                        >
+                          {downloading
+                            ? <><Loader2 size={9} className="spin-smooth" />{modelDownloadProgress > 0 ? `${modelDownloadProgress}%` : '…'}</>
+                            : <><Download size={9} />Télécharger</>
+                          }
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Row label="Accélération GPU">
+                  <Toggle value={local.stt.gpuEnabled} onChange={(v) => set('stt', 'gpuEnabled', v)} label="GPU" />
+                </Row>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── LLM ── */}
+        {tab === 'llm' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <SectionHeader>Fournisseur LLM</SectionHeader>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {LLM_PROVIDERS.map((p) => {
+                const active = local.llm.provider === p.value;
+                return (
+                  <div
+                    key={p.value}
+                    onClick={() => set('llm', 'provider', p.value)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
+                      border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
+                      background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                      border: `2px solid ${active ? 'var(--accent)' : 'var(--text-muted)'}`,
+                      background: active ? 'var(--accent)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'white' }} />}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{p.label}</p>
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{p.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>Démarrer minimisé</label>
-              <Toggle value={localSettings.ui.startMinimized} onChange={(v) => updateField('ui', 'startMinimized', v)} label="Démarrer minimisé" />
+
+            {local.llm.provider === 'ollama' && (
+              <>
+                <Field label="URL Ollama">
+                  <input type="text" className="input-base" value={local.llm.ollamaUrl} onChange={(e) => set('llm', 'ollamaUrl', e.target.value)} />
+                </Field>
+                <Field label="Modèle Ollama">
+                  <input type="text" className="input-base" value={local.llm.ollamaModel} onChange={(e) => set('llm', 'ollamaModel', e.target.value)} placeholder="mistral, llama3, gemma2…" />
+                </Field>
+              </>
+            )}
+            {local.llm.provider === 'openai' && (
+              <>
+                <Field label="Clé API OpenAI">
+                  <ApiKeyInput value={local.llm.openaiApiKey} onChange={(v) => set('llm', 'openaiApiKey', v)} placeholder="sk-..." keyId="openai" showKeys={showKeys} toggleKey={toggleKey} />
+                </Field>
+                <Field label="Modèle">
+                  <input type="text" className="input-base" value={local.llm.openaiModel} onChange={(e) => set('llm', 'openaiModel', e.target.value)} />
+                </Field>
+              </>
+            )}
+            {local.llm.provider === 'anthropic' && (
+              <>
+                <Field label="Clé API Anthropic">
+                  <ApiKeyInput value={local.llm.anthropicApiKey} onChange={(v) => set('llm', 'anthropicApiKey', v)} placeholder="sk-ant-..." keyId="anthropic" showKeys={showKeys} toggleKey={toggleKey} />
+                </Field>
+                <Field label="Modèle">
+                  <input type="text" className="input-base" value={local.llm.anthropicModel} onChange={(e) => set('llm', 'anthropicModel', e.target.value)} />
+                </Field>
+              </>
+            )}
+            {local.llm.provider === 'glm' && (
+              <>
+                <Field label="Clé API GLM (Zhipu AI)">
+                  <ApiKeyInput value={local.llm.glmApiKey} onChange={(v) => set('llm', 'glmApiKey', v)} placeholder="votre-clé-api…" keyId="glm" showKeys={showKeys} toggleKey={toggleKey} />
+                </Field>
+                <Field label="Modèle">
+                  <input type="text" className="input-base" value={local.llm.glmModel} onChange={(e) => set('llm', 'glmModel', e.target.value)} placeholder="glm-4-flash" />
+                </Field>
+              </>
+            )}
+
+            {local.llm.provider !== 'none' && (
+              <>
+                <Field label={`Température — ${local.llm.temperature.toFixed(2)}`}>
+                  <input type="range" min="0" max="1" step="0.05" value={local.llm.temperature} onChange={(e) => set('llm', 'temperature', parseFloat(e.target.value))} style={{ width: '100%' }} />
+                </Field>
+                <Field label="Prompt personnalisé (mode Custom)" hint="Utilisé uniquement en mode 'Custom'">
+                  <textarea
+                    value={local.llm.customPrompt}
+                    onChange={(e) => set('llm', 'customPrompt', e.target.value)}
+                    className="input-base"
+                    style={{ resize: 'none', height: 72 }}
+                    placeholder="Entrez un prompt système personnalisé…"
+                  />
+                </Field>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Shortcuts ── */}
+        {tab === 'shortcuts' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <SectionHeader>Raccourcis globaux</SectionHeader>
+            <Field label="Démarrer / Arrêter la dictée">
+              <input type="text" className="input-base" value={local.shortcuts.toggleRecording} onChange={(e) => set('shortcuts', 'toggleRecording', e.target.value)} style={{ fontFamily: 'ui-monospace, monospace' }} />
+            </Field>
+          </div>
+        )}
+
+        {/* ── Privacy ── */}
+        {tab === 'privacy' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <SectionHeader>Mode de confidentialité</SectionHeader>
+            {(
+              [
+                { mode: 'local'  as PrivacyMode, label: '100% Local',  desc: 'Aucune donnée envoyée en ligne',               color: '#34d399' },
+                { mode: 'hybrid' as PrivacyMode, label: 'Hybride',     desc: 'STT local, LLM cloud si configuré',            color: '#fbbf24' },
+                { mode: 'cloud'  as PrivacyMode, label: 'Cloud',       desc: 'STT et LLM cloud pour la meilleure qualité',  color: '#f87171' },
+              ] as const
+            ).map(({ mode, label, desc, color }) => {
+              const active = local.privacy === mode;
+              return (
+                <div
+                  key={mode}
+                  onClick={() => setLocal((p) => p ? { ...p, privacy: mode } : p)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 14px', borderRadius: 11, cursor: 'pointer',
+                    border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
+                    background: active ? color + '10' : 'var(--bg-input)',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <div style={{
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    background: active ? color : 'var(--text-muted)',
+                    boxShadow: active ? `0 0 8px ${color}` : 'none',
+                  }} />
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: active ? color : 'var(--text-primary)' }}>{label}</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── UI ── */}
+        {tab === 'ui' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <SectionHeader>Apparence</SectionHeader>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([{ id: 'dark', label: '🌙  Sombre' }, { id: 'light', label: '☀️  Clair' }] as const).map((t) => (
+                <button
+                  key={t.id}
+                  onClick={async () => {
+                    setTheme(t.id);
+                    set('ui', 'theme', t.id);
+                    if (local && window.voiceink) {
+                      const updated = { ...local, ui: { ...local.ui, theme: t.id } };
+                      await window.voiceink.setSettings(updated);
+                    }
+                  }}
+                  style={{
+                    flex: 1, padding: '9px', borderRadius: 9, fontSize: 11, fontWeight: 600,
+                    border: `1px solid ${theme === t.id ? 'var(--pill-active-border)' : 'var(--border)'}`,
+                    background: theme === t.id ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                    color: theme === t.id ? 'var(--accent)' : 'var(--text-secondary)',
+                    cursor: 'pointer', transition: 'all 0.15s ease',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
-            <div className="flex items-center justify-between">
-              <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>Afficher l'overlay</label>
-              <Toggle value={localSettings.ui.showOverlay} onChange={(v) => updateField('ui', 'showOverlay', v)} label="Afficher l'overlay" />
-            </div>
+
+            <SectionHeader>Comportement</SectionHeader>
+            <Row label="Minimiser dans le tray" desc="Garder l'app active en arrière-plan">
+              <Toggle value={local.ui.minimizeToTray} onChange={(v) => set('ui', 'minimizeToTray', v)} label="Tray" />
+            </Row>
+            <Row label="Démarrer minimisé">
+              <Toggle value={local.ui.startMinimized} onChange={(v) => set('ui', 'startMinimized', v)} label="Démarrage minimisé" />
+            </Row>
+            <Row label="Afficher l'overlay flottant">
+              <Toggle value={local.ui.showOverlay} onChange={(v) => set('ui', 'showOverlay', v)} label="Overlay" />
+            </Row>
           </div>
         )}
       </div>

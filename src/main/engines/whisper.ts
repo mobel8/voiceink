@@ -44,6 +44,13 @@ export class WhisperEngine {
   private serverReady: boolean = false;
   private isReady: boolean = false;
 
+  // Persistent Python server (Linux faster-whisper)
+  private pythonServerProcess: ChildProcess | null = null;
+  private pythonServerReady: boolean = false;
+  private pythonServerPendingResolve: ((result: any) => void) | null = null;
+  private pythonServerPendingReject: ((err: Error) => void) | null = null;
+  private pythonBin: string = 'python3';
+
   constructor(configService: ConfigService) {
     this.configService = configService;
   }
@@ -70,8 +77,8 @@ export class WhisperEngine {
     if (!foundModel) {
       console.log('No whisper model found. Will download tiny on first use.');
       this.isReady = false;
-    } else if (foundModel !== 'tiny') {
-      // Download tiny in background for faster transcription next time
+    } else if (foundModel === 'tiny') {
+      // Tiny found but base is better — download base in background
       console.log('Downloading base model in background for better quality...');
       this.downloadModel('base' as STTModel, (p) => {
         if (p % 25 === 0) console.log(`Base model download: ${p}%`);
@@ -88,16 +95,20 @@ export class WhisperEngine {
       });
     }
 
-    // Find binaries - auto-download if missing so server can start immediately
+    // Find binaries - auto-download only on Windows (Linux uses faster-whisper Python)
     this.cliBinaryPath = this.findBinaryByNames(CLI_BINARY_NAMES);
     this.serverBinaryPath = this.findBinaryByNames(SERVER_BINARY_NAMES);
 
     if (!this.cliBinaryPath && !this.serverBinaryPath) {
-      console.log('Whisper binaries not found. Downloading...');
-      try {
-        await this.downloadBinary((msg) => console.log(msg));
-      } catch (err: any) {
-        console.error('Binary download failed:', err.message);
+      if (process.platform === 'win32') {
+        console.log('Whisper binaries not found. Downloading...');
+        try {
+          await this.downloadBinary((msg) => console.log(msg));
+        } catch (err: any) {
+          console.error('Binary download failed:', err.message);
+        }
+      } else {
+        console.log('[STT] Linux: using faster-whisper (Python) for transcription.');
       }
     }
 
@@ -107,6 +118,13 @@ export class WhisperEngine {
     // Start persistent server if possible
     if (this.isReady && this.serverBinaryPath) {
       await this.startServer();
+    }
+
+    // On Linux: start persistent Python server for sub-second transcription
+    if (process.platform !== 'win32') {
+      this.startPythonServer().catch((err) =>
+        console.warn('[Python Server] Failed to start:', err.message)
+      );
     }
   }
 
@@ -472,8 +490,8 @@ export class WhisperEngine {
       }
     }
 
-    // Auto-download binaries if not present
-    if (!this.cliBinaryPath && !this.serverBinaryPath) {
+    // Auto-download binaries only on Windows (Linux uses faster-whisper Python)
+    if (!this.cliBinaryPath && !this.serverBinaryPath && process.platform === 'win32') {
       console.log('[STT] Whisper binaries not found, downloading...');
       await this.downloadBinary((msg) => console.log(msg));
 
@@ -648,29 +666,145 @@ export class WhisperEngine {
     });
   }
 
-  private async transcribeViaPython(audioPath: string, language?: string): Promise<TranscriptionResult> {
-    const settings = this.configService.getSettings();
-    const lang = language || settings.stt.language || 'fr';
-    const model = settings.stt.localModel || 'tiny';
+  // ===== Persistent Python Server (Linux, sub-second transcription) =====
 
-    // Try venv first, then system python
-    // __dirname at runtime is dist/main/engines, project root is 3 levels up
+  private findPythonBin(): string {
     const projectRoot = path.resolve(__dirname, '..', '..', '..');
-    const pythonPaths = [
+    const candidates = [
       path.join(projectRoot, '.venv', 'bin', 'python3'),
       path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
       'python3',
       'python',
     ];
-
-    let pythonBin = 'python3';
-    for (const p of pythonPaths) {
+    for (const p of candidates) {
       try {
         execSync(`"${p}" -c "import faster_whisper" 2>/dev/null`, { timeout: 5000 });
-        pythonBin = p;
-        break;
+        return p;
       } catch {}
     }
+    return 'python3';
+  }
+
+  private async startPythonServer(): Promise<void> {
+    // Always use tiny for the persistent server — it's 4x faster than base
+    // and keeps latency under 1 second. Base/larger models can be used via CLI fallback.
+    const model = 'tiny';
+    this.pythonBin = this.findPythonBin();
+
+    const serverScript = path.resolve(__dirname, 'whisper_server.py');
+    if (!fs.existsSync(serverScript)) {
+      throw new Error(`whisper_server.py not found at ${serverScript}`);
+    }
+
+    console.log(`[Python Server] Starting with model=${model}, python=${this.pythonBin}`);
+
+    this.pythonServerProcess = spawn(this.pythonBin, [serverScript, model], {
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    });
+
+    let buffer = '';
+
+    this.pythonServerProcess.stdout?.on('data', (data: Buffer) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const msg = JSON.parse(trimmed);
+          if (msg.ready) {
+            this.pythonServerReady = true;
+            console.log('[Python Server] Model loaded, ready for sub-second transcription');
+            return;
+          }
+          // Resolve pending transcription
+          if (this.pythonServerPendingResolve) {
+            const resolve = this.pythonServerPendingResolve;
+            this.pythonServerPendingResolve = null;
+            this.pythonServerPendingReject = null;
+            if (msg.error) {
+              resolve(null); // will be handled by caller
+            } else {
+              resolve(msg);
+            }
+          }
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    });
+
+    this.pythonServerProcess.stderr?.on('data', (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg) console.log(`[Python Server] ${msg}`);
+    });
+
+    this.pythonServerProcess.on('close', (code) => {
+      console.log(`[Python Server] Exited (code ${code})`);
+      this.pythonServerReady = false;
+      this.pythonServerProcess = null;
+      if (this.pythonServerPendingReject) {
+        this.pythonServerPendingReject(new Error(`Python server exited (code ${code})`));
+        this.pythonServerPendingResolve = null;
+        this.pythonServerPendingReject = null;
+      }
+    });
+
+    this.pythonServerProcess.on('error', (err) => {
+      console.error('[Python Server] Error:', err.message);
+      this.pythonServerReady = false;
+    });
+  }
+
+  private stopPythonServer(): void {
+    if (this.pythonServerProcess) {
+      this.pythonServerProcess.kill();
+      this.pythonServerProcess = null;
+      this.pythonServerReady = false;
+    }
+  }
+
+  private async transcribeViaPythonServer(audioPath: string, lang: string): Promise<TranscriptionResult> {
+    return new Promise((resolve, reject) => {
+      if (!this.pythonServerProcess || !this.pythonServerReady) {
+        reject(new Error('Python server not ready'));
+        return;
+      }
+
+      this.pythonServerPendingResolve = (result) => {
+        if (!result) {
+          reject(new Error('Python server returned error'));
+          return;
+        }
+        resolve({
+          text: result.text || '',
+          language: result.language || lang,
+          segments: [],
+          duration: result.duration || 0,
+        });
+      };
+      this.pythonServerPendingReject = reject;
+
+      const req = JSON.stringify({ path: audioPath, lang }) + '\n';
+      this.pythonServerProcess.stdin?.write(req);
+    });
+  }
+
+  // ===== Python transcription (spawn fallback) =====
+
+  private async transcribeViaPython(audioPath: string, language?: string): Promise<TranscriptionResult> {
+    const settings = this.configService.getSettings();
+    const lang = language || settings.stt.language || 'fr';
+
+    // Use persistent server if available (sub-second)
+    if (this.pythonServerReady && this.pythonServerProcess) {
+      return this.transcribeViaPythonServer(audioPath, lang);
+    }
+
+    // Fallback: spawn a new process (slower, model reloads each time)
+    const model = settings.stt.localModel || 'base';
 
     const script = `
 import sys, json
@@ -682,8 +816,13 @@ duration = info.duration if hasattr(info, 'duration') else 0
 print(json.dumps({"text": text, "language": info.language, "duration": duration}))
 `;
 
+    // Ensure pythonBin is resolved
+    if (!this.pythonBin || this.pythonBin === 'python3') {
+      this.pythonBin = this.findPythonBin();
+    }
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(pythonBin, ['-c', script], {
+      const proc = spawn(this.pythonBin, ['-c', script], {
         timeout: 60000,
         env: { ...process.env, PYTHONUNBUFFERED: '1' },
       });

@@ -37,7 +37,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   privacy: 'local',
   shortcuts: {
     toggleRecording: 'CommandOrControl+Shift+Space',
-    pushToTalk: 'CommandOrControl+Shift+V',
     cancelRecording: 'Escape',
   },
   ui: {

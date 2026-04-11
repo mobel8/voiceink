@@ -112,8 +112,8 @@ export interface AppSettings {
 
 export interface ShortcutConfig {
   toggleRecording: string;
-  pushToTalk: string;
   cancelRecording: string;
+  pushToTalk?: string; // kept optional for backward-compat with saved settings
 }
 
 export interface UIConfig {

@@ -31,10 +31,11 @@ function createMainWindow(): BrowserWindow {
     minWidth: 400,
     minHeight: 600,
     frame: false,
-    transparent: false,
+    transparent: true,
     resizable: true,
     show: false,
-    backgroundColor: '#0f0f14',
+    hasShadow: false,
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

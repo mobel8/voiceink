@@ -16,9 +16,10 @@
   },
   "dependencies": {
     "@electron/remote": "^2.1.2",
-    "sql.js": "^1.11.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.2.2",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
+    "sql.js": "^1.11.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
