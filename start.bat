@@ -7,13 +7,10 @@ echo.
 echo  VoiceInk - Demarrage
 echo  =====================
 echo.
-echo  Dossier: %cd%
-echo.
 
-:: Log file for debugging
+:: Log file
 set "LOGFILE=%~dp0start.log"
 echo [%date% %time%] Demarrage VoiceInk > "%LOGFILE%"
-echo [%date% %time%] Dossier: %cd% >> "%LOGFILE%"
 
 :: Kill previous instances
 taskkill /F /IM electron.exe >nul 2>nul
@@ -80,17 +77,16 @@ echo [3/3] Compilation OK
 :launch
 echo.
 echo  Lancement de VoiceInk...
-echo  (cette fenetre peut etre fermee)
+echo  ^(cette fenetre peut etre fermee^)
 echo.
 echo [LAUNCH] %date% %time% >> "%LOGFILE%"
 
-:: Use start /B to keep output visible but not block
 if exist "node_modules\.bin\electron.cmd" (
     echo  electron.cmd trouve >> "%LOGFILE%"
-    "node_modules\.bin\electron.cmd" dist\main\index.js
+    "node_modules\.bin\electron.cmd" --no-sandbox dist\main\index.js
 ) else (
     echo  Fallback npx >> "%LOGFILE%"
-    npx electron dist\main\index.js
+    npx electron --no-sandbox dist\main\index.js
 )
 
 :: If we get here, electron exited
