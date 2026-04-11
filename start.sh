@@ -10,4 +10,4 @@ node node_modules/vite/bin/vite.js build 2>&1
 
 # Start
 echo "[2/2] Démarrage de VoiceInk..."
-node_modules/.bin/electron dist/main/index.js
+node_modules/.bin/electron --no-sandbox dist/main/index.js

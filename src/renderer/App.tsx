@@ -1,19 +1,13 @@
 import React, { useEffect } from 'react';
 import { useStore } from './stores/useStore';
-import { TitleBar } from './components/TitleBar';
-import { MainView } from './components/MainView';
-import { SettingsView } from './components/SettingsView';
-import { HistoryView } from './components/HistoryView';
-import { FileView } from './components/FileView';
-import { ChatView } from './components/ChatView';
-import { Sidebar } from './components/Sidebar';
-import { StatusBar } from './components/StatusBar';
-import { ToastContainer } from './components/Toast';
 import { CompactOverlay } from './components/CompactOverlay';
+import { PanelView } from './components/PanelView';
+import { ToastContainer } from './components/Toast';
 
 export default function App() {
   const {
-    currentView, compactMode, theme, setTheme, setSettings, setPipelineStatus, setRecordingState,
+    panelExpanded, compactMode, setCompactMode,
+    theme, setTheme, setSettings, setPipelineStatus, setRecordingState,
     setLlmStreamText, appendLlmStreamToken, setIsLlmStreaming,
   } = useStore();
 
@@ -44,7 +38,6 @@ export default function App() {
       });
     }
 
-    // LLM stream listener
     let unsubLlmStream: (() => void) | undefined;
     if (window.voiceink?.onLLMStream) {
       unsubLlmStream = window.voiceink.onLLMStream((token: string) => {
@@ -66,46 +59,32 @@ export default function App() {
     };
   }, [setSettings, setPipelineStatus, setRecordingState, setLlmStreamText, appendLlmStreamToken, setIsLlmStreaming]);
 
-  // Apply theme to document
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Compact overlay mode
-  if (compactMode) {
+  // Panel mode: expanded floating panel
+  if (panelExpanded) {
     return (
-      <div className="h-screen w-screen bg-transparent overflow-hidden">
-        <CompactOverlay />
+      <div className="h-screen w-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+        <PanelView />
+        <ToastContainer />
       </div>
     );
   }
 
-  const renderView = () => {
-    switch (currentView) {
-      case 'settings':
-        return <SettingsView />;
-      case 'history':
-        return <HistoryView />;
-      case 'file':
-        return <FileView />;
-      case 'chat':
-        return <ChatView />;
-      default:
-        return <MainView />;
-    }
-  };
-
+  // Default: orb mode (circular clip)
   return (
-    <div className="flex flex-col h-screen" style={{ background: 'var(--bg-primary)' }}>
-      <TitleBar />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {renderView()}
-        </main>
-      </div>
-      <StatusBar />
-      <ToastContainer />
+    <div
+      className="h-screen w-screen overflow-hidden compact-root"
+      style={{
+        background: 'transparent',
+        borderRadius: '50%',
+        clipPath: 'circle(50% at 50% 50%)',
+        WebkitClipPath: 'circle(50% at 50% 50%)',
+      }}
+    >
+      <CompactOverlay />
     </div>
   );
 }

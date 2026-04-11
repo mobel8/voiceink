@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=VoiceInk
+Comment=Dictée vocale intelligente avec post-traitement LLM
+Exec=/home/moi/Bureau/voice/launch.sh
+Path=/home/moi/Bureau/voice
+Icon=utilities-terminal
+Terminal=true
+Type=Application
+Categories=AudioVideo;Utility;
+Keywords=voice;dictation;transcription;whisper;STT;
+StartupNotify=true

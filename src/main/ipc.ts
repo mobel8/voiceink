@@ -328,26 +328,39 @@ export function registerIpcHandlers(
       if (!savedBounds) savedBounds = mainWindow.getBounds();
       const display = screen.getPrimaryDisplay();
       const { width: screenW } = display.workAreaSize;
-      // Renderer is source of truth for box size (orb + halo headroom already included)
-      const cw = width  || 132;
-      const ch = height || 132;
+      const cw = width  || 90;
+      const ch = height || 90;
       mainWindow.setMinimumSize(60, 60);
       mainWindow.setResizable(false);
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.setBounds({ x: Math.round(screenW / 2 - cw / 2), y: 18, width: cw, height: ch });
     } else {
-      mainWindow.setAlwaysOnTop(false);
-      mainWindow.setMinimumSize(400, 600);
+      // Panel mode: compact floating panel, still on top
+      const pw = width  || 320;
+      const ph = height || 420;
+      mainWindow.setMinimumSize(280, 360);
+      mainWindow.setMaximumSize(400, 520);
       mainWindow.setResizable(true);
+      mainWindow.setAlwaysOnTop(true, 'floating');
       if (savedBounds) {
-        mainWindow.setBounds(savedBounds);
+        const pos = mainWindow.getPosition();
+        mainWindow.setBounds({ x: pos[0], y: pos[1], width: pw, height: ph });
         savedBounds = null;
       } else {
-        mainWindow.setSize(480, 720);
-        mainWindow.center();
+        mainWindow.setSize(pw, ph);
       }
     }
     return true;
+  });
+
+  // ===== Orb Position Persistence =====
+  ipcMain.handle(IPC.APP_SET_ORB_POSITION, (_event, x: number, y: number) => {
+    configService.updateSettings({ _orbPosition: { x, y } } as any);
+  });
+
+  ipcMain.handle(IPC.APP_GET_ORB_POSITION, () => {
+    const settings = configService.getSettings() as any;
+    return settings?._orbPosition || null;
   });
 }
 

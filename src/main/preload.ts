@@ -77,6 +77,8 @@ const api = {
   minimize: () => ipcRenderer.send(IPC.APP_MINIMIZE),
   toggleRecording: () => ipcRenderer.send(IPC.APP_TOGGLE_RECORDING),
   setCompactMode: (compact: boolean, width?: number, height?: number) => ipcRenderer.invoke(IPC.APP_COMPACT_MODE, compact, width, height),
+  setOrbPosition: (x: number, y: number) => ipcRenderer.invoke(IPC.APP_SET_ORB_POSITION, x, y),
+  getOrbPosition: () => ipcRenderer.invoke(IPC.APP_GET_ORB_POSITION),
   onToggleRecording: (cb: () => void) => {
     const handler = () => cb();
     ipcRenderer.on(IPC.APP_TOGGLE_RECORDING, handler);

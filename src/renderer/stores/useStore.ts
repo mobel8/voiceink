@@ -17,14 +17,21 @@ interface Toast {
   duration?: number;
 }
 
+interface ResultBubble {
+  text: string;
+  mode: string;
+}
+
 interface AppState {
   // View
   currentView: View;
   setView: (view: View) => void;
   compactMode: boolean;
   setCompactMode: (v: boolean) => void;
-  compactSize: 'xs' | 'sm' | 'md';
-  setCompactSize: (s: 'xs' | 'sm' | 'md') => void;
+  panelExpanded: boolean;
+  setPanelExpanded: (v: boolean) => void;
+  resultBubble: ResultBubble | null;
+  setResultBubble: (b: ResultBubble | null) => void;
   compactStyle: 'purple' | 'cyan' | 'green' | 'rose' | 'white';
   setCompactStyle: (s: 'purple' | 'cyan' | 'green' | 'rose' | 'white') => void;
   compactVisualization: 'radial' | 'waveform' | 'oscillogram';
@@ -107,10 +114,12 @@ export const useStore = create<AppState>((set) => ({
   // View
   currentView: 'main',
   setView: (view) => set({ currentView: view }),
-  compactMode: false,
+  compactMode: true,
   setCompactMode: (v) => set({ compactMode: v }),
-  compactSize: 'sm',
-  setCompactSize: (s) => set({ compactSize: s }),
+  panelExpanded: false,
+  setPanelExpanded: (v) => set({ panelExpanded: v }),
+  resultBubble: null,
+  setResultBubble: (b) => set({ resultBubble: b }),
   compactStyle: 'purple',
   setCompactStyle: (s) => set({ compactStyle: s }),
   compactVisualization: 'radial',

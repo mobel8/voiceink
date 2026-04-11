@@ -312,9 +312,9 @@ export function MainView() {
   }, [processedText, llmStreamText, currentText, addToast]);
 
   const handleCompact = () => {
-    // Keep in sync with CompactOverlay.tsx SIZES — orb diameter + halo headroom
-    const szMap = { xs: 48, sm: 62, md: 80 } as const;
-    const d     = szMap[compactSize] + 52;
+    // Keep in sync with CompactOverlay.tsx SIZES — square box clipped to circle
+    const boxMap = { xs: 104, sm: 134, md: 174 } as const;
+    const d      = boxMap[compactSize];
     setCompactMode(true);
     window.voiceink?.setCompactMode(true, d, d);
   };

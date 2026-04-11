@@ -26,15 +26,17 @@ const isDev = !app.isPackaged && process.env.VOICEINK_DEV === '1';
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 480,
-    height: 720,
-    minWidth: 400,
-    minHeight: 600,
+    width: 90,
+    height: 90,
+    minWidth: 60,
+    minHeight: 60,
     frame: false,
     transparent: true,
-    resizable: true,
+    resizable: false,
     show: false,
     hasShadow: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

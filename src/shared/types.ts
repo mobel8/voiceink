@@ -173,6 +173,8 @@ export const IPC = {
   APP_RECORDING_STATE: 'app:recording-state',
   APP_PIPELINE_STATUS: 'app:pipeline-status',
   APP_COMPACT_MODE: 'app:compact-mode',
+  APP_SET_ORB_POSITION: 'app:set-orb-position',
+  APP_GET_ORB_POSITION: 'app:get-orb-position',
 
   // Chat
   CHAT_SEND: 'chat:send',
