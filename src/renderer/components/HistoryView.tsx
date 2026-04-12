@@ -1,23 +1,27 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Search, Trash2, Download, Tag, Copy, Clock, FileAudio, Mic, X } from 'lucide-react';
 import { useStore } from '../stores/useStore';
+import { useTranslation } from '../i18n/useTranslation';
 import type { HistoryEntry, ExportFormat } from '@shared/types';
-import { MODE_LABELS } from '../lib/constants';
-
-const formatDate = (ts: number) =>
-  new Date(ts).toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-
-const formatDuration = (s: number) =>
-  s < 60 ? `${s.toFixed(0)}s` : `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
+import type { TranslationKey } from '../i18n/translations';
 
 export function HistoryView() {
   const { history, setHistory } = useStore();
+  const { t, locale } = useTranslation();
   const [query,         setQuery]         = useState('');
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
   const [tagInput,      setTagInput]      = useState('');
+
+  const dateLocale = locale === 'en' ? 'en-US' : 'fr-FR';
+
+  const formatDate = (ts: number) =>
+    new Date(ts).toLocaleString(dateLocale, {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+
+  const formatDuration = (s: number) =>
+    s < 60 ? `${s.toFixed(0)}s` : `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
 
   const load = useCallback(async () => {
     if (window.voiceink) {
@@ -61,7 +65,7 @@ export function HistoryView() {
         }}
       >
         <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>
-          Historique
+          {t('history.title')}
         </h1>
         <div style={{ position: 'relative' }}>
           <Search
@@ -75,7 +79,7 @@ export function HistoryView() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher…"
+            placeholder={t('history.search')}
             className="input-base"
             style={{ paddingLeft: 30 }}
           />
@@ -86,16 +90,17 @@ export function HistoryView() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* List */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {history.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: 'var(--text-muted)' }}>
               <Clock size={28} style={{ opacity: 0.3 }} />
-              <p style={{ fontSize: 12 }}>Aucun historique</p>
+              <p style={{ fontSize: 12 }}>{t('history.empty')}</p>
             </div>
           ) : (
             <div>
               {history.map((entry) => {
                 const active = selectedEntry?.id === entry.id;
+                const modeKey = `modeLabel.${entry.mode}` as TranslationKey;
                 return (
                   <div
                     key={entry.id}
@@ -129,7 +134,7 @@ export function HistoryView() {
                             background: 'var(--accent-subtle)', color: 'var(--accent)',
                             border: '1px solid var(--pill-active-border)',
                           }}>
-                            {MODE_LABELS[entry.mode] || entry.mode}
+                            {t(modeKey) || entry.mode}
                           </span>
                           {entry.source === 'file'      && <FileAudio size={9} style={{ color: 'var(--text-muted)' }} />}
                           {entry.source === 'dictation' && <Mic        size={9} style={{ color: 'var(--text-muted)' }} />}
@@ -158,7 +163,7 @@ export function HistoryView() {
                           onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(entry.processedText || entry.originalText); }}
                           className="icon-btn"
                           style={{ width: 24, height: 24, borderRadius: 5 }}
-                          title="Copier"
+                          title={t('common.copy')}
                         >
                           <Copy size={11} />
                         </button>
@@ -166,7 +171,7 @@ export function HistoryView() {
                           onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }}
                           className="icon-btn"
                           style={{ width: 24, height: 24, borderRadius: 5 }}
-                          title="Supprimer"
+                          title={t('common.delete')}
                           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'rgba(244,63,94,0.1)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.color = ''; e.currentTarget.style.background = ''; }}
                         >
@@ -186,7 +191,7 @@ export function HistoryView() {
           <div
             className="animate-fade-in"
             style={{
-              width: 220, overflowY: 'auto', flexShrink: 0,
+              width: 220, overflowY: 'auto', flexShrink: 0, minHeight: 0,
               borderLeft: '1px solid var(--border-subtle)',
               background: 'var(--bg-surface)',
               padding: '12px',
@@ -194,7 +199,7 @@ export function HistoryView() {
           >
             {/* Panel header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Détails</p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{t('common.details')}</p>
               <button className="icon-btn" style={{ width: 22, height: 22, borderRadius: 5 }} onClick={() => setSelectedEntry(null)}>
                 <X size={11} />
               </button>
@@ -203,10 +208,10 @@ export function HistoryView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Meta fields */}
               {[
-                { label: 'Date',   value: formatDate(selectedEntry.timestamp) },
-                { label: 'Mode',   value: MODE_LABELS[selectedEntry.mode] || selectedEntry.mode },
-                { label: 'Langue', value: selectedEntry.language },
-                { label: 'Durée',  value: formatDuration(selectedEntry.duration) },
+                { label: t('history.date'),   value: formatDate(selectedEntry.timestamp) },
+                { label: t('history.mode'),   value: t(`modeLabel.${selectedEntry.mode}` as TranslationKey) || selectedEntry.mode },
+                { label: t('history.language'), value: selectedEntry.language },
+                { label: t('history.duration'),  value: formatDuration(selectedEntry.duration) },
               ].map(({ label, value }) => (
                 <div key={label}>
                   <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>{label}</p>
@@ -216,7 +221,7 @@ export function HistoryView() {
 
               {/* Tags */}
               <div>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>Tags</p>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>{t('history.tags')}</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
                   {selectedEntry.tags.map((tag) => (
                     <span key={tag} style={{
@@ -231,7 +236,7 @@ export function HistoryView() {
                     type="text" value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddTag(selectedEntry.id)}
-                    placeholder="Ajouter…"
+                    placeholder={t('history.addTag')}
                     className="input-base"
                     style={{ fontSize: 10, padding: '4px 8px', flex: 1 }}
                   />
@@ -244,7 +249,7 @@ export function HistoryView() {
               {/* Processed text */}
               {selectedEntry.processedText && (
                 <div>
-                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Texte traité</p>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>{t('history.processed')}</p>
                   <p style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {selectedEntry.processedText}
                   </p>
@@ -254,7 +259,7 @@ export function HistoryView() {
               {/* Original if different */}
               {selectedEntry.originalText && selectedEntry.originalText !== selectedEntry.processedText && (
                 <div>
-                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>Original</p>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>{t('common.original')}</p>
                   <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {selectedEntry.originalText}
                   </p>
@@ -263,7 +268,7 @@ export function HistoryView() {
 
               {/* Export */}
               <div>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>Exporter</p>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>{t('common.export')}</p>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {(['txt', 'srt', 'json'] as ExportFormat[]).map((fmt) => (
                     <button

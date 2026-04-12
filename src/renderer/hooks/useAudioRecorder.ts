@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useStore } from '../stores/useStore';
 
 declare global {
   interface Window {
@@ -123,13 +124,16 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       setError(null);
       samplesRef.current = [];
 
+      const settings = useStore.getState().settings;
+      const audioSettings = settings?.audio;
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 16000,
           echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          noiseSuppression: audioSettings?.noiseReduction ?? true,
+          autoGainControl: audioSettings?.autoGain ?? true,
         },
       });
       streamRef.current = stream;

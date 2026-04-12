@@ -2,19 +2,10 @@ import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Settings, Mic, Square, X, Loader2, ChevronRight, ArrowUpRight, GripHorizontal } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useRecordingSession } from '../hooks/useRecordingSession';
+import { useTranslation } from '../i18n/useTranslation';
 import { SUPPORTED_LANGUAGES } from '../lib/constants';
 import type { ProcessingMode } from '@shared/types';
-
-const MODE_PILLS: { mode: ProcessingMode; label: string }[] = [
-  { mode: 'raw',           label: 'Brut'    },
-  { mode: 'email',         label: 'Email'   },
-  { mode: 'short_message', label: 'Message' },
-  { mode: 'meeting_notes', label: 'Notes'   },
-  { mode: 'summary',       label: 'Résumé'  },
-  { mode: 'formal',        label: 'Formel'  },
-  { mode: 'simplified',    label: 'Simple'  },
-  { mode: 'custom',        label: 'Custom'  },
-];
+import type { TranslationKey } from '../i18n/translations';
 
 const ORB = { d: 48, box: 90 };
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -23,15 +14,28 @@ export function CompactOverlay() {
   const {
     setPanelExpanded,
     setSelectedMode, selectedMode, selectedLanguage, setSelectedLanguage,
+    targetLanguage, setTargetLanguage,
     resultBubble, setResultBubble,
   } = useStore();
+  const { t } = useTranslation();
 
   const { toggleRecording, isRecording, audioLevel, recordingState: recState } = useRecordingSession();
   const menuRef = useRef<HTMLDivElement>(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [menuSection, setMenuSection] = useState<'main' | 'mode' | 'lang'>('main');
+  const [menuSection, setMenuSection] = useState<'main' | 'mode' | 'lang' | 'translate'>('main');
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
+
+  const MODE_PILLS: { mode: ProcessingMode; key: TranslationKey }[] = [
+    { mode: 'raw',           key: 'mode.raw' },
+    { mode: 'email',         key: 'mode.email' },
+    { mode: 'short_message', key: 'mode.short_message' },
+    { mode: 'meeting_notes', key: 'mode.meeting_notes' },
+    { mode: 'summary',       key: 'mode.summary' },
+    { mode: 'formal',        key: 'mode.formal' },
+    { mode: 'simplified',    key: 'mode.simplified' },
+    { mode: 'custom',        key: 'mode.custom' },
+  ];
 
   const isRec  = recState === 'recording';
   const isProc = recState === 'processing';
@@ -39,8 +43,8 @@ export function CompactOverlay() {
   // Auto-fade result bubble
   useEffect(() => {
     if (!resultBubble) return;
-    const t = setTimeout(() => setResultBubble(null), 3000);
-    return () => clearTimeout(t);
+    const tm = setTimeout(() => setResultBubble(null), 3000);
+    return () => clearTimeout(tm);
   }, [resultBubble, setResultBubble]);
 
   // Close menu on outside click
@@ -102,7 +106,6 @@ export function CompactOverlay() {
       className="h-full w-full flex items-center justify-center relative"
       onContextMenu={(e) => { e.preventDefault(); setShowMenu(!showMenu); setMenuSection('main'); }}
       onMouseDown={(e) => {
-        // Track where the mouse went down to detect click vs drag
         mouseDownPos.current = { x: e.screenX, y: e.screenY };
         isDragging.current = false;
       }}
@@ -116,7 +119,6 @@ export function CompactOverlay() {
         }
       }}
       onMouseUp={(e) => {
-        // If the mouse didn't move much, it's a click → toggle recording
         if (mouseDownPos.current && !isDragging.current) {
           toggleRecording();
         }
@@ -184,12 +186,12 @@ export function CompactOverlay() {
         }}
       />
 
-      {/* ── Expand button — always visible, sits at bottom of orb ── */}
+      {/* Expand button */}
       <button
         className="titlebar-no-drag"
         onMouseDown={(e) => { e.stopPropagation(); mouseDownPos.current = null; }}
         onClick={(e) => { e.stopPropagation(); handleExpand(); }}
-        title="Ouvrir le panel"
+        title={t('orb.openPanelTitle')}
         style={{
           position: 'absolute',
           bottom: 4,
@@ -218,7 +220,7 @@ export function CompactOverlay() {
         <ArrowUpRight size={8} color="rgba(230,220,255,0.85)" strokeWidth={2.5} />
       </button>
 
-      {/* The Orb — purely visual, parent handles click/drag */}
+      {/* The Orb */}
       <div
         className="relative pointer-events-none"
         style={{
@@ -270,37 +272,50 @@ export function CompactOverlay() {
             <>
               <MenuItem
                 icon={isRec ? <Square size={10} /> : <Mic size={10} />}
-                label={isRec ? 'Arrêter' : 'Enregistrer'}
+                label={isRec ? t('orb.stop') : t('orb.record')}
                 shortcut="Ctrl+⇧ Space"
                 onClick={() => { toggleRecording(); setShowMenu(false); }}
               />
               <MenuSeparator />
-              <MenuItem icon={<></>} label={`Mode: ${MODE_PILLS.find(m => m.mode === selectedMode)?.label || 'Brut'}`} chevron onClick={() => setMenuSection('mode')} />
-              <MenuItem icon={<></>} label={`Langue: ${selectedLanguage.toUpperCase()}`} chevron onClick={() => setMenuSection('lang')} />
+              <MenuItem icon={<></>} label={`${t('orb.mode')}: ${t(MODE_PILLS.find(m => m.mode === selectedMode)?.key || 'mode.raw')}`} chevron onClick={() => setMenuSection('mode')} />
+              <MenuItem icon={<></>} label={`${t('orb.lang')}: ${selectedLanguage.toUpperCase()}`} chevron onClick={() => setMenuSection('lang')} />
+              <MenuItem icon={<></>} label={`${t('orb.translate')}: ${targetLanguage ? targetLanguage.toUpperCase() : '—'}`} chevron onClick={() => setMenuSection('translate')} />
               <MenuSeparator />
-              <MenuItem icon={<ArrowUpRight size={10} />} label="Ouvrir le panel" onClick={() => { setShowMenu(false); handleExpand(); }} />
-              <MenuItem icon={<Settings size={10} />} label="Paramètres" onClick={() => { setShowMenu(false); useStore.getState().setView('settings'); handleExpand(); }} />
+              <MenuItem icon={<ArrowUpRight size={10} />} label={t('orb.openPanel')} onClick={() => { setShowMenu(false); handleExpand(); }} />
+              <MenuItem icon={<Settings size={10} />} label={t('nav.settings')} onClick={() => { setShowMenu(false); useStore.getState().setView('settings'); handleExpand(); }} />
               <MenuSeparator />
-              <MenuItem icon={<X size={10} />} label="Quitter" danger onClick={() => { window.voiceink?.quit(); }} />
+              <MenuItem icon={<X size={10} />} label={t('common.quit')} danger onClick={() => { window.voiceink?.quit(); }} />
             </>
           )}
 
           {menuSection === 'mode' && (
             <>
-              <MenuItem icon={<></>} label="← Mode" onClick={() => setMenuSection('main')} />
+              <MenuItem icon={<></>} label={`← ${t('orb.mode')}`} onClick={() => setMenuSection('main')} />
               <MenuSeparator />
-              {MODE_PILLS.map(({ mode, label }) => (
-                <MenuItem key={mode} icon={<></>} label={label} checked={selectedMode === mode} onClick={() => { setSelectedMode(mode); setShowMenu(false); }} />
+              {MODE_PILLS.map(({ mode, key }) => (
+                <MenuItem key={mode} icon={<></>} label={t(key)} checked={selectedMode === mode} onClick={() => { setSelectedMode(mode); setShowMenu(false); }} />
               ))}
             </>
           )}
 
           {menuSection === 'lang' && (
             <>
-              <MenuItem icon={<></>} label="← Langue" onClick={() => setMenuSection('main')} />
+              <MenuItem icon={<></>} label={`← ${t('orb.lang')}`} onClick={() => setMenuSection('main')} />
               <MenuSeparator />
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <MenuItem key={lang.code} icon={<></>} label={lang.name} checked={selectedLanguage === lang.code} onClick={() => { setSelectedLanguage(lang.code); setShowMenu(false); }} />
+              ))}
+            </>
+          )}
+
+          {menuSection === 'translate' && (
+            <>
+              <MenuItem icon={<></>} label={`← ${t('orb.translate')}`} onClick={() => setMenuSection('main')} />
+              <MenuSeparator />
+              <MenuItem icon={<></>} label={t('orb.translateNone')} checked={!targetLanguage} onClick={() => { setTargetLanguage(''); setShowMenu(false); }} />
+              <MenuSeparator />
+              {SUPPORTED_LANGUAGES.filter((l) => l.code !== selectedLanguage).map((lang) => (
+                <MenuItem key={lang.code} icon={<></>} label={lang.name} checked={targetLanguage === lang.code} onClick={() => { setTargetLanguage(lang.code); setShowMenu(false); }} />
               ))}
             </>
           )}

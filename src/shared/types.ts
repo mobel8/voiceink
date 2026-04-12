@@ -118,6 +118,7 @@ export interface ShortcutConfig {
 
 export interface UIConfig {
   theme: 'light' | 'dark' | 'system';
+  language: 'fr' | 'en';
   overlayPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   showOverlay: boolean;
   minimizeToTray: boolean;

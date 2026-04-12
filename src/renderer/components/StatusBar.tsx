@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../stores/useStore';
+import { useTranslation } from '../i18n/useTranslation';
 
 function Timer({ startTime }: { startTime: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -48,6 +49,7 @@ export function StatusBar() {
     pipelineStatus, recordingState, settings,
     modelReady, recordingStartTime, lastTranscriptionMs,
   } = useStore();
+  const { t } = useTranslation();
 
   const provider =
     settings?.stt?.provider === 'groq'   ? 'Groq'
@@ -104,7 +106,7 @@ export function StatusBar() {
               ✓ {(lastTranscriptionMs / 1000).toFixed(2)}s
             </span>
           ) : (
-            pipelineStatus.message || 'Prêt'
+            pipelineStatus.message || t('status.ready')
           )}
         </span>
       </div>

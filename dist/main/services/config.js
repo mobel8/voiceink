@@ -75,6 +75,7 @@ const DEFAULT_SETTINGS = {
     },
     ui: {
         theme: 'dark',
+        language: 'fr',
         overlayPosition: 'top-right',
         showOverlay: true,
         minimizeToTray: true,

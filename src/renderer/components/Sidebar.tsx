@@ -1,16 +1,18 @@
 import React from 'react';
 import { Mic, Settings, Clock, FileAudio, MessageSquare } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-
-const NAV = [
-  { id: 'main'     as const, Icon: Mic,           label: 'Dictée'      },
-  { id: 'chat'     as const, Icon: MessageSquare,  label: 'Chat IA'     },
-  { id: 'file'     as const, Icon: FileAudio,      label: 'Fichier'     },
-  { id: 'history'  as const, Icon: Clock,          label: 'Historique'  },
-];
+import { useTranslation } from '../i18n/useTranslation';
 
 export function Sidebar() {
   const { currentView, setView, recordingState } = useStore();
+  const { t } = useTranslation();
+
+  const NAV = [
+    { id: 'main'     as const, Icon: Mic,           label: t('nav.diction') },
+    { id: 'chat'     as const, Icon: MessageSquare,  label: t('nav.chat') },
+    { id: 'file'     as const, Icon: FileAudio,      label: t('nav.file') },
+    { id: 'history'  as const, Icon: Clock,          label: t('nav.history') },
+  ];
 
   const renderBtn = (
     id: string,
@@ -118,7 +120,7 @@ export function Sidebar() {
           background: 'var(--border)', borderRadius: 1,
         }}
       />
-      {renderBtn('settings', Settings, 'Paramètres', currentView === 'settings')}
+      {renderBtn('settings', Settings, t('nav.settings'), currentView === 'settings')}
     </nav>
   );
 }

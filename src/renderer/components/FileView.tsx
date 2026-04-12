@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Upload, FileAudio, Loader2, Copy, Wand2 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { MODE_LABELS } from '../lib/constants';
+import { useTranslation } from '../i18n/useTranslation';
+import type { TranslationKey } from '../i18n/translations';
 
 export function FileView() {
   const { selectedMode, addToast } = useStore();
+  const { t } = useTranslation();
   const [filePath,    setFilePath]    = useState<string | null>(null);
   const [fileName,    setFileName]    = useState('');
   const [processing,  setProcessing]  = useState(false);
@@ -13,6 +15,8 @@ export function FileView() {
   const [dragging,    setDragging]    = useState(false);
 
   const ACCEPTED = ['mp3', 'wav', 'm4a', 'mp4', 'ogg', 'webm', 'flac'];
+
+  const modeKey = `modeLabel.${selectedMode}` as TranslationKey;
 
   const loadFile = (path: string, name: string) => {
     setFilePath(path); setFileName(name);
@@ -36,7 +40,7 @@ export function FileView() {
       const path = (file as any).path;
       if (path) loadFile(path, file.name);
     } else {
-      addToast({ type: 'error', message: 'Format non supporté' });
+      addToast({ type: 'error', message: t('file.unsupported') });
     }
   };
 
@@ -46,9 +50,9 @@ export function FileView() {
     try {
       const res = await window.voiceink.transcribeFile(filePath);
       setResult({ original: res.transcription.text, processed: res.processed.processed });
-      addToast({ type: 'success', message: 'Fichier transcrit avec succès' });
+      addToast({ type: 'success', message: t('file.success') });
     } catch (err: any) {
-      setError(err.message || 'Erreur de transcription');
+      setError(err.message || t('file.error'));
     }
     setProcessing(false);
   };
@@ -56,7 +60,7 @@ export function FileView() {
   const handleCopy = () => {
     if (!result) return;
     navigator.clipboard.writeText(result.processed || result.original);
-    addToast({ type: 'success', message: 'Copié' });
+    addToast({ type: 'success', message: t('common.copied') });
   };
 
   return (
@@ -67,14 +71,14 @@ export function FileView() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-          Transcription de fichier
+          {t('file.title')}
         </h1>
         <span style={{
           fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
           background: 'var(--accent-subtle)', border: '1px solid var(--pill-active-border)',
           color: 'var(--accent)',
         }}>
-          {MODE_LABELS[selectedMode]}
+          {t(modeKey)}
         </span>
       </div>
 
@@ -108,7 +112,7 @@ export function FileView() {
             <FileAudio size={28} style={{ color: 'var(--accent)' }} />
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{fileName}</p>
-              <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Cliquer ou glisser pour changer</p>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{t('file.change')}</p>
             </div>
           </>
         ) : (
@@ -123,7 +127,7 @@ export function FileView() {
             </div>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
-                {dragging ? 'Déposez le fichier ici' : 'Glissez un fichier ou cliquez'}
+                {dragging ? t('file.dropHere') : t('file.drop')}
               </p>
               <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
                 MP3 · WAV · M4A · MP4 · OGG · FLAC
@@ -142,8 +146,8 @@ export function FileView() {
           style={{ padding: '10px', justifyContent: 'center', borderRadius: 10, fontSize: 12, flexShrink: 0 }}
         >
           {processing
-            ? <><Loader2 size={14} className="spin-smooth" /> Transcription en cours…</>
-            : <><Wand2 size={14} /> Transcrire</>
+            ? <><Loader2 size={14} className="spin-smooth" /> {t('file.transcribing')}</>
+            : <><Wand2 size={14} /> {t('file.transcribe')}</>
           }
         </button>
       )}
@@ -163,15 +167,15 @@ export function FileView() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Résultat
+              {t('common.result')}
             </p>
             <button onClick={handleCopy} className="btn-ghost" style={{ fontSize: 10, padding: '3px 8px' }}>
-              <Copy size={10} /> Copier
+              <Copy size={10} /> {t('common.copy')}
             </button>
           </div>
 
           <div style={{
-            flex: 1, overflowY: 'auto', padding: '12px',
+            flex: 1, overflowY: 'auto', padding: '12px', minHeight: 0,
             background: 'var(--bg-input)', borderRadius: 10,
             border: '1px solid var(--border)',
           }}>
@@ -183,7 +187,7 @@ export function FileView() {
           {result.original && result.processed && result.original !== result.processed && (
             <details>
               <summary style={{ fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
-                Afficher le texte original
+                {t('file.showOriginal')}
               </summary>
               <div style={{
                 marginTop: 6, padding: '10px 12px',

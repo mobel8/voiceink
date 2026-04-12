@@ -339,11 +339,12 @@ class WhisperEngine {
     // ===== Direct buffer transcription (no temp file) =====
     async transcribeFromBuffer(audioBuffer, language) {
         const settings = this.configService.getSettings();
-        const lang = language || settings.stt.language || 'fr';
+        const autoDetect = settings.stt.autoDetectLanguage && !language;
+        const lang = autoDetect ? '' : (language || settings.stt.language || 'fr');
         if (settings.stt.provider === 'groq') {
             const groqKey = settings.stt.groqApiKey;
             if (groqKey) {
-                console.log(`[STT] Groq direct buffer (${audioBuffer.length} bytes, lang=${lang})`);
+                console.log(`[STT] Groq direct buffer (${audioBuffer.length} bytes, lang=${lang || 'auto'})`);
                 return this.transcribeGroqBuffer(audioBuffer, groqKey, lang);
             }
         }
@@ -361,14 +362,18 @@ class WhisperEngine {
     async transcribeGroqBuffer(audioBuffer, apiKey, lang) {
         const t0 = Date.now();
         const boundary = '----VIGroq' + t0;
-        const body = Buffer.concat([
+        const parts = [
             Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="a.wav"\r\nContent-Type: audio/wav\r\n\r\n`),
             audioBuffer,
             Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-large-v3-turbo\r\n`),
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${lang}\r\n`),
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`),
-            Buffer.from(`--${boundary}--\r\n`),
-        ]);
+        ];
+        // Omit language parameter for auto-detection (lang === '')
+        if (lang) {
+            parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${lang}\r\n`));
+        }
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`));
+        parts.push(Buffer.from(`--${boundary}--\r\n`));
+        const body = Buffer.concat(parts);
         console.log(`[STT] Groq body built: ${body.length} bytes (${Date.now() - t0}ms)`);
         return new Promise((resolve, reject) => {
             const tReq = Date.now();
@@ -408,8 +413,9 @@ class WhisperEngine {
                             return;
                         }
                         const text = (result.text || '').trim();
-                        console.log(`[STT] Groq OK ${tEnd - t0}ms: "${text.substring(0, 80)}"`);
-                        resolve({ text, language: lang, segments: [], duration: result.duration || 0 });
+                        const detectedLang = result.language || lang || 'unknown';
+                        console.log(`[STT] Groq OK ${tEnd - t0}ms: "${text.substring(0, 80)}"${!lang ? ` (detected: ${detectedLang})` : ''}`);
+                        resolve({ text, language: detectedLang, segments: [], duration: result.duration || 0 });
                     }
                     catch {
                         reject(new Error(`Groq parse error: ${data.slice(0, 200)}`));

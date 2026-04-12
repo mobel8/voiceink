@@ -1,9 +1,11 @@
 import React from 'react';
 import { Minus, X } from 'lucide-react';
 import { useStore } from '../stores/useStore';
+import { useTranslation } from '../i18n/useTranslation';
 
 export function TitleBar() {
   const { recordingState } = useStore();
+  const { t } = useTranslation();
 
   const isRecording  = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
@@ -81,7 +83,7 @@ export function TitleBar() {
           onClick={() => window.voiceink?.minimize()}
           className="icon-btn"
           style={{ width: 28, height: 24, borderRadius: 6 }}
-          title="Réduire"
+          title={t('common.minimize')}
         >
           <Minus size={11} strokeWidth={2} />
         </button>
@@ -89,7 +91,7 @@ export function TitleBar() {
           onClick={() => window.voiceink?.quit()}
           className="icon-btn"
           style={{ width: 28, height: 24, borderRadius: 6 }}
-          title="Quitter"
+          title={t('common.quit')}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'rgba(244,63,94,0.1)';
             e.currentTarget.style.color = 'var(--recording)';

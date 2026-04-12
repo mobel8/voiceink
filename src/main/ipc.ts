@@ -336,8 +336,8 @@ export function registerIpcHandlers(
       mainWindow.setBounds({ x: Math.round(screenW / 2 - cw / 2), y: 18, width: cw, height: ch });
     } else {
       // Panel mode: compact floating panel, still on top
-      const pw = width  || 320;
-      const ph = height || 420;
+      const pw = width  || 340;
+      const ph = height || 480;
       mainWindow.setMinimumSize(280, 360);
       mainWindow.setMaximumSize(400, 520);
       mainWindow.setResizable(true);

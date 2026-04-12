@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Trash2, Loader2, Bot, User } from 'lucide-react';
 import { useStore } from '../stores/useStore';
+import { useTranslation } from '../i18n/useTranslation';
 import { v4 as uuidv4 } from 'uuid';
 import type { ChatMessage } from '@shared/types';
 
@@ -9,6 +10,7 @@ export function ChatView() {
     chatMessages, addChatMessage, updateLastAssistantMessage,
     clearChat, isChatStreaming, setIsChatStreaming, addToast,
   } = useStore();
+  const { t, locale } = useTranslation();
 
   const [input, setInput] = useState('');
   const bottomRef  = useRef<HTMLDivElement>(null);
@@ -48,7 +50,7 @@ export function ChatView() {
       const messages = [...chatMessages, userMsg].map((m) => ({ role: m.role, content: m.content }));
       if (window.voiceink?.sendChat) await window.voiceink.sendChat(messages);
     } catch (err: any) {
-      addToast({ type: 'error', message: err?.message || 'Erreur chat' });
+      addToast({ type: 'error', message: err?.message || t('chat.error') });
     } finally {
       setIsChatStreaming(false);
     }
@@ -57,6 +59,8 @@ export function ChatView() {
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
+
+  const dateLocale = locale === 'en' ? 'en-US' : 'fr-FR';
 
   return (
     <div
@@ -72,19 +76,19 @@ export function ChatView() {
           flexShrink: 0,
         }}
       >
-        <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Chat IA</h1>
+        <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('chat.title')}</h1>
         <button
           onClick={clearChat}
           className="btn-ghost"
           style={{ padding: '5px 8px', fontSize: 10 }}
-          title="Effacer la conversation"
+          title={t('chat.clearTooltip')}
         >
-          <Trash2 size={11} /> Effacer
+          <Trash2 size={11} /> {t('chat.clear')}
         </button>
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
         {chatMessages.length === 0 && (
           <div style={{
             display: 'flex', flexDirection: 'column',
@@ -98,9 +102,9 @@ export function ChatView() {
             }}>
               <Bot size={20} style={{ color: 'var(--accent)' }} />
             </div>
-            <p style={{ fontSize: 12, fontWeight: 500 }}>Commencer une conversation</p>
+            <p style={{ fontSize: 12, fontWeight: 500 }}>{t('chat.empty')}</p>
             <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              Utilise le fournisseur LLM configuré
+              {t('chat.emptyDesc')}
             </p>
           </div>
         )}
@@ -161,7 +165,7 @@ export function ChatView() {
                   color: isUser ? 'rgba(255,255,255,0.45)' : 'var(--text-muted)',
                   textAlign: isUser ? 'right' : 'left',
                 }}>
-                  {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.timestamp).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
@@ -194,7 +198,7 @@ export function ChatView() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Écrire un message… (Entrée pour envoyer)"
+            placeholder={t('chat.placeholder')}
             rows={1}
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',

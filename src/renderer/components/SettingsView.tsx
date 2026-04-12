@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Save, RotateCcw, Download, Check, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '../stores/useStore';
+import { useTranslation } from '../i18n/useTranslation';
 import type { AppSettings, STTModel, STTProvider, LLMProvider, PrivacyMode } from '@shared/types';
+import type { TranslationKey } from '../i18n/translations';
 
 const STT_MODELS: { value: STTModel; label: string; size: string }[] = [
   { value: 'tiny',   label: 'Tiny',   size: '75 MB'  },
@@ -11,30 +13,7 @@ const STT_MODELS: { value: STTModel; label: string; size: string }[] = [
   { value: 'large',  label: 'Large',  size: '3.1 GB' },
 ];
 
-const STT_PROVIDERS: { value: STTProvider; label: string; desc: string }[] = [
-  { value: 'groq',   label: 'Groq',    desc: 'Whisper large-v3 — ultra rapide, gratuit'   },
-  { value: 'local',  label: 'Local',   desc: 'Whisper.cpp — 100% offline, CPU/GPU'         },
-  { value: 'openai', label: 'OpenAI',  desc: 'Whisper API — haute qualité, cloud'          },
-  { value: 'glm',    label: 'GLM',     desc: 'Zhipu AI — utilise la clé LLM'              },
-];
-
-const LLM_PROVIDERS: { value: LLMProvider; label: string; desc: string }[] = [
-  { value: 'none',      label: 'Aucun',      desc: 'Texte brut sans post-traitement'          },
-  { value: 'ollama',    label: 'Ollama',      desc: 'LLM local — llama, mistral, gemma…'       },
-  { value: 'openai',    label: 'OpenAI',      desc: 'GPT-4o, GPT-4-turbo…'                    },
-  { value: 'anthropic', label: 'Anthropic',   desc: 'Claude Sonnet, Haiku…'                   },
-  { value: 'glm',       label: 'GLM Flash',   desc: 'Zhipu AI — rapide et économique'         },
-];
-
 type SettingsTab = 'audio' | 'stt' | 'llm' | 'shortcuts' | 'privacy' | 'ui';
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'audio',    label: 'Audio'         },
-  { id: 'stt',      label: 'STT'           },
-  { id: 'llm',      label: 'LLM'           },
-  { id: 'shortcuts',label: 'Raccourcis'    },
-  { id: 'privacy',  label: 'Confidentialité'},
-  { id: 'ui',       label: 'Interface'     },
-];
 
 /* ─── Shared field wrapper ─── */
 const Field = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
@@ -129,10 +108,35 @@ const Row = ({ label, desc, children }: { label: string; desc?: string; children
 
 export function SettingsView() {
   const { settings, setSettings, modelDownloadProgress, addToast, theme, setTheme } = useStore();
+  const { t } = useTranslation();
   const [local, setLocal]      = useState<AppSettings | null>(null);
   const [downloading, setDl]   = useState(false);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [tab, setTab]          = useState<SettingsTab>('audio');
+
+  const TABS: { id: SettingsTab; label: string }[] = [
+    { id: 'audio',    label: t('settings.tab.audio') },
+    { id: 'stt',      label: t('settings.tab.stt') },
+    { id: 'llm',      label: t('settings.tab.llm') },
+    { id: 'shortcuts',label: t('settings.tab.shortcuts') },
+    { id: 'privacy',  label: t('settings.tab.privacy') },
+    { id: 'ui',       label: t('settings.tab.ui') },
+  ];
+
+  const STT_PROVIDERS: { value: STTProvider; label: string; desc: string }[] = [
+    { value: 'groq',   label: t('stt.groq'),    desc: t('stt.groqDesc') },
+    { value: 'local',  label: t('stt.local'),   desc: t('stt.localDesc') },
+    { value: 'openai', label: t('stt.openai'),  desc: t('stt.openaiDesc') },
+    { value: 'glm',    label: t('stt.glm'),     desc: t('stt.glmDesc') },
+  ];
+
+  const LLM_PROVIDERS: { value: LLMProvider; label: string; desc: string }[] = [
+    { value: 'none',      label: t('settings.llm.none'),    desc: t('settings.llm.noneDesc') },
+    { value: 'ollama',    label: 'Ollama',                   desc: t('settings.llm.ollamaDesc') },
+    { value: 'openai',    label: 'OpenAI',                   desc: t('llm.openaiDesc') },
+    { value: 'anthropic', label: 'Anthropic',                desc: t('llm.anthropicDesc') },
+    { value: 'glm',       label: 'GLM Flash',                desc: t('llm.glmDesc') },
+  ];
 
   useEffect(() => {
     if (settings) setLocal({ ...settings });
@@ -153,7 +157,7 @@ export function SettingsView() {
     if (local && window.voiceink) {
       const updated = await window.voiceink.setSettings(local);
       setSettings(updated);
-      addToast({ type: 'success', message: 'Paramètres sauvegardés' });
+      addToast({ type: 'success', message: t('settings.saved') });
     }
   };
 
@@ -161,7 +165,7 @@ export function SettingsView() {
     if (window.voiceink) {
       const d = await window.voiceink.resetSettings();
       setLocal(d); setSettings(d);
-      addToast({ type: 'info', message: 'Paramètres réinitialisés' });
+      addToast({ type: 'info', message: t('settings.resetDone') });
     }
   };
 
@@ -170,9 +174,9 @@ export function SettingsView() {
     setDl(true);
     try {
       await window.voiceink.downloadModel(model);
-      addToast({ type: 'success', message: `Modèle ${model} téléchargé` });
+      addToast({ type: 'success', message: t('settings.modelDownloaded').replace('{model}', model) });
     } catch {
-      addToast({ type: 'error', message: 'Erreur de téléchargement' });
+      addToast({ type: 'error', message: t('settings.downloadError') });
     }
     setDl(false);
   };
@@ -194,14 +198,14 @@ export function SettingsView() {
         }}
       >
         <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-          Paramètres
+          {t('settings.title')}
         </h1>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={handleReset} className="btn-ghost">
-            <RotateCcw size={11} /> Réinitialiser
+            <RotateCcw size={11} /> {t('common.reset')}
           </button>
           <button onClick={handleSave} className="btn-accent">
-            <Save size={11} /> Sauvegarder
+            <Save size={11} /> {t('common.save')}
           </button>
         </div>
       </div>
@@ -216,40 +220,40 @@ export function SettingsView() {
         }}
         role="tablist"
       >
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
+            key={tb.id}
             role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === tb.id}
+            onClick={() => setTab(tb.id)}
             style={{
               padding: '8px 10px',
-              fontSize: 11, fontWeight: tab === t.id ? 600 : 500,
+              fontSize: 11, fontWeight: tab === tb.id ? 600 : 500,
               whiteSpace: 'nowrap',
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-muted)',
+              color: tab === tb.id ? 'var(--accent)' : 'var(--text-muted)',
               background: 'transparent',
               border: 'none',
-              borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+              borderBottom: `2px solid ${tab === tb.id ? 'var(--accent)' : 'transparent'}`,
               cursor: 'pointer', transition: 'all 0.15s ease',
               marginBottom: -1,
             }}
           >
-            {t.label}
+            {tb.label}
           </button>
         ))}
       </div>
 
       {/* Content */}
       <div
-        style={{ flex: 1, overflowY: 'auto', padding: '16px' }}
+        style={{ flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0 }}
         role="tabpanel"
       >
 
         {/* ── Audio ── */}
         {tab === 'audio' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <SectionHeader>Capture</SectionHeader>
-            <Field label="Sensibilité du microphone">
+            <SectionHeader>{t('settings.audio.capture')}</SectionHeader>
+            <Field label={t('settings.audio.sensitivity')}>
               <input
                 type="range" min="0" max="1" step="0.05"
                 value={local.audio.sensitivity}
@@ -260,12 +264,12 @@ export function SettingsView() {
                 {Math.round(local.audio.sensitivity * 100)}%
               </span>
             </Field>
-            <SectionHeader>Traitement</SectionHeader>
-            <Row label="Réduction de bruit" desc="Filtre le bruit ambiant">
-              <Toggle value={local.audio.noiseReduction} onChange={(v) => set('audio', 'noiseReduction', v)} label="Réduction de bruit" />
+            <SectionHeader>{t('settings.audio.processing')}</SectionHeader>
+            <Row label={t('settings.audio.noiseReduction')} desc={t('settings.audio.noiseReductionDesc')}>
+              <Toggle value={local.audio.noiseReduction} onChange={(v) => set('audio', 'noiseReduction', v)} label={t('settings.audio.noiseReduction')} />
             </Row>
-            <Row label="Gain automatique" desc="Ajuste le volume automatiquement">
-              <Toggle value={local.audio.autoGain} onChange={(v) => set('audio', 'autoGain', v)} label="Gain automatique" />
+            <Row label={t('settings.audio.autoGain')} desc={t('settings.audio.autoGainDesc')}>
+              <Toggle value={local.audio.autoGain} onChange={(v) => set('audio', 'autoGain', v)} label={t('settings.audio.autoGain')} />
             </Row>
           </div>
         )}
@@ -273,7 +277,7 @@ export function SettingsView() {
         {/* ── STT ── */}
         {tab === 'stt' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Fournisseur STT</SectionHeader>
+            <SectionHeader>{t('settings.stt.provider')}</SectionHeader>
 
             {/* Provider cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -312,7 +316,7 @@ export function SettingsView() {
 
             {/* Groq key */}
             {local.stt.provider === 'groq' && (
-              <Field label="Clé API Groq" hint="Gratuite sur console.groq.com">
+              <Field label={t('settings.stt.groqKey')} hint={t('settings.stt.groqKeyHint')}>
                 <ApiKeyInput
                   value={local.stt.groqApiKey || ''} onChange={(v) => set('stt', 'groqApiKey', v)}
                   placeholder="gsk_..." keyId="groq" showKeys={showKeys} toggleKey={toggleKey}
@@ -322,7 +326,7 @@ export function SettingsView() {
 
             {/* OpenAI STT key */}
             {local.stt.provider === 'openai' && (
-              <Field label="Clé API OpenAI">
+              <Field label={t('settings.stt.openaiKey')}>
                 <ApiKeyInput
                   value={local.stt.openaiApiKey || ''} onChange={(v) => set('stt', 'openaiApiKey', v)}
                   placeholder="sk-..." keyId="stt_openai" showKeys={showKeys} toggleKey={toggleKey}
@@ -333,7 +337,7 @@ export function SettingsView() {
             {/* Local models */}
             {local.stt.provider === 'local' && (
               <>
-                <SectionHeader>Modèle Whisper</SectionHeader>
+                <SectionHeader>{t('settings.stt.whisperModel')}</SectionHeader>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {STT_MODELS.map((m) => {
                     const active = local.stt.localModel === m.value;
@@ -362,15 +366,18 @@ export function SettingsView() {
                         >
                           {downloading
                             ? <><Loader2 size={9} className="spin-smooth" />{modelDownloadProgress > 0 ? `${modelDownloadProgress}%` : '…'}</>
-                            : <><Download size={9} />Télécharger</>
+                            : <><Download size={9} />{t('common.download')}</>
                           }
                         </button>
                       </div>
                     );
                   })}
                 </div>
-                <Row label="Accélération GPU">
+                <Row label={t('settings.stt.gpuAccel')}>
                   <Toggle value={local.stt.gpuEnabled} onChange={(v) => set('stt', 'gpuEnabled', v)} label="GPU" />
+                </Row>
+                <Row label={t('settings.stt.autoDetect')} desc={t('settings.stt.autoDetectDesc')}>
+                  <Toggle value={local.stt.autoDetectLanguage} onChange={(v) => set('stt', 'autoDetectLanguage', v)} label="Auto" />
                 </Row>
               </>
             )}
@@ -380,7 +387,7 @@ export function SettingsView() {
         {/* ── LLM ── */}
         {tab === 'llm' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Fournisseur LLM</SectionHeader>
+            <SectionHeader>{t('settings.llm.provider')}</SectionHeader>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {LLM_PROVIDERS.map((p) => {
@@ -416,40 +423,40 @@ export function SettingsView() {
 
             {local.llm.provider === 'ollama' && (
               <>
-                <Field label="URL Ollama">
+                <Field label={t('settings.llm.ollamaUrl')}>
                   <input type="text" className="input-base" value={local.llm.ollamaUrl} onChange={(e) => set('llm', 'ollamaUrl', e.target.value)} />
                 </Field>
-                <Field label="Modèle Ollama">
+                <Field label={t('settings.llm.ollamaModel')}>
                   <input type="text" className="input-base" value={local.llm.ollamaModel} onChange={(e) => set('llm', 'ollamaModel', e.target.value)} placeholder="mistral, llama3, gemma2…" />
                 </Field>
               </>
             )}
             {local.llm.provider === 'openai' && (
               <>
-                <Field label="Clé API OpenAI">
+                <Field label={t('settings.llm.openaiKey')}>
                   <ApiKeyInput value={local.llm.openaiApiKey} onChange={(v) => set('llm', 'openaiApiKey', v)} placeholder="sk-..." keyId="openai" showKeys={showKeys} toggleKey={toggleKey} />
                 </Field>
-                <Field label="Modèle">
+                <Field label={t('settings.llm.model')}>
                   <input type="text" className="input-base" value={local.llm.openaiModel} onChange={(e) => set('llm', 'openaiModel', e.target.value)} />
                 </Field>
               </>
             )}
             {local.llm.provider === 'anthropic' && (
               <>
-                <Field label="Clé API Anthropic">
+                <Field label={t('settings.llm.anthropicKey')}>
                   <ApiKeyInput value={local.llm.anthropicApiKey} onChange={(v) => set('llm', 'anthropicApiKey', v)} placeholder="sk-ant-..." keyId="anthropic" showKeys={showKeys} toggleKey={toggleKey} />
                 </Field>
-                <Field label="Modèle">
+                <Field label={t('settings.llm.model')}>
                   <input type="text" className="input-base" value={local.llm.anthropicModel} onChange={(e) => set('llm', 'anthropicModel', e.target.value)} />
                 </Field>
               </>
             )}
             {local.llm.provider === 'glm' && (
               <>
-                <Field label="Clé API GLM (Zhipu AI)">
+                <Field label={t('settings.llm.glmKey')}>
                   <ApiKeyInput value={local.llm.glmApiKey} onChange={(v) => set('llm', 'glmApiKey', v)} placeholder="votre-clé-api…" keyId="glm" showKeys={showKeys} toggleKey={toggleKey} />
                 </Field>
-                <Field label="Modèle">
+                <Field label={t('settings.llm.model')}>
                   <input type="text" className="input-base" value={local.llm.glmModel} onChange={(e) => set('llm', 'glmModel', e.target.value)} placeholder="glm-4-flash" />
                 </Field>
               </>
@@ -457,16 +464,16 @@ export function SettingsView() {
 
             {local.llm.provider !== 'none' && (
               <>
-                <Field label={`Température — ${local.llm.temperature.toFixed(2)}`}>
+                <Field label={`${t('settings.llm.temperature')} — ${local.llm.temperature.toFixed(2)}`}>
                   <input type="range" min="0" max="1" step="0.05" value={local.llm.temperature} onChange={(e) => set('llm', 'temperature', parseFloat(e.target.value))} style={{ width: '100%' }} />
                 </Field>
-                <Field label="Prompt personnalisé (mode Custom)" hint="Utilisé uniquement en mode 'Custom'">
+                <Field label={t('settings.llm.customPrompt')} hint={t('settings.llm.customPromptHint')}>
                   <textarea
                     value={local.llm.customPrompt}
                     onChange={(e) => set('llm', 'customPrompt', e.target.value)}
                     className="input-base"
                     style={{ resize: 'none', height: 72 }}
-                    placeholder="Entrez un prompt système personnalisé…"
+                    placeholder={t('settings.llm.customPromptPlaceholder')}
                   />
                 </Field>
               </>
@@ -477,8 +484,8 @@ export function SettingsView() {
         {/* ── Shortcuts ── */}
         {tab === 'shortcuts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Raccourcis globaux</SectionHeader>
-            <Field label="Démarrer / Arrêter la dictée">
+            <SectionHeader>{t('settings.shortcuts.global')}</SectionHeader>
+            <Field label={t('settings.shortcuts.toggleRecord')}>
               <input type="text" className="input-base" value={local.shortcuts.toggleRecording} onChange={(e) => set('shortcuts', 'toggleRecording', e.target.value)} style={{ fontFamily: 'ui-monospace, monospace' }} />
             </Field>
           </div>
@@ -487,14 +494,14 @@ export function SettingsView() {
         {/* ── Privacy ── */}
         {tab === 'privacy' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <SectionHeader>Mode de confidentialité</SectionHeader>
+            <SectionHeader>{t('settings.privacy.mode')}</SectionHeader>
             {(
               [
-                { mode: 'local'  as PrivacyMode, label: '100% Local',  desc: 'Aucune donnée envoyée en ligne',               color: '#34d399' },
-                { mode: 'hybrid' as PrivacyMode, label: 'Hybride',     desc: 'STT local, LLM cloud si configuré',            color: '#fbbf24' },
-                { mode: 'cloud'  as PrivacyMode, label: 'Cloud',       desc: 'STT et LLM cloud pour la meilleure qualité',  color: '#f87171' },
+                { mode: 'local'  as PrivacyMode, labelKey: 'settings.privacy.local' as TranslationKey,    descKey: 'settings.privacy.localDesc' as TranslationKey,    color: '#34d399' },
+                { mode: 'hybrid' as PrivacyMode, labelKey: 'settings.privacy.hybrid' as TranslationKey,    descKey: 'settings.privacy.hybridDesc' as TranslationKey,   color: '#fbbf24' },
+                { mode: 'cloud'  as PrivacyMode, labelKey: 'settings.privacy.cloud' as TranslationKey,     descKey: 'settings.privacy.cloudDesc' as TranslationKey,    color: '#f87171' },
               ] as const
-            ).map(({ mode, label, desc, color }) => {
+            ).map(({ mode, labelKey, descKey, color }) => {
               const active = local.privacy === mode;
               return (
                 <div
@@ -514,8 +521,8 @@ export function SettingsView() {
                     boxShadow: active ? `0 0 8px ${color}` : 'none',
                   }} />
                   <div>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: active ? color : 'var(--text-primary)' }}>{label}</p>
-                    <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{desc}</p>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: active ? color : 'var(--text-primary)' }}>{t(labelKey)}</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{t(descKey)}</p>
                   </div>
                 </div>
               );
@@ -526,40 +533,53 @@ export function SettingsView() {
         {/* ── UI ── */}
         {tab === 'ui' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <SectionHeader>Apparence</SectionHeader>
+            <SectionHeader>{t('settings.ui.language')}</SectionHeader>
+            <Row label={t('settings.ui.language')} desc={t('settings.ui.languageDesc')}>
+              <select
+                className="input-base"
+                value={local.ui.language || 'fr'}
+                onChange={(e) => set('ui', 'language', e.target.value)}
+                style={{ width: 120 }}
+              >
+                <option value="fr">Français</option>
+                <option value="en">English</option>
+              </select>
+            </Row>
+
+            <SectionHeader>{t('settings.ui.appearance')}</SectionHeader>
             <div style={{ display: 'flex', gap: 8 }}>
-              {([{ id: 'dark', label: '🌙  Sombre' }, { id: 'light', label: '☀️  Clair' }] as const).map((t) => (
+              {([{ id: 'dark', label: t('settings.ui.dark') }, { id: 'light', label: t('settings.ui.light') }] as const).map((tb) => (
                 <button
-                  key={t.id}
+                  key={tb.id}
                   onClick={async () => {
-                    setTheme(t.id);
-                    set('ui', 'theme', t.id);
+                    setTheme(tb.id);
+                    set('ui', 'theme', tb.id);
                     if (local && window.voiceink) {
-                      const updated = { ...local, ui: { ...local.ui, theme: t.id } };
+                      const updated = { ...local, ui: { ...local.ui, theme: tb.id } };
                       await window.voiceink.setSettings(updated);
                     }
                   }}
                   style={{
                     flex: 1, padding: '9px', borderRadius: 9, fontSize: 11, fontWeight: 600,
-                    border: `1px solid ${theme === t.id ? 'var(--pill-active-border)' : 'var(--border)'}`,
-                    background: theme === t.id ? 'var(--accent-subtle)' : 'var(--bg-input)',
-                    color: theme === t.id ? 'var(--accent)' : 'var(--text-secondary)',
+                    border: `1px solid ${theme === tb.id ? 'var(--pill-active-border)' : 'var(--border)'}`,
+                    background: theme === tb.id ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                    color: theme === tb.id ? 'var(--accent)' : 'var(--text-secondary)',
                     cursor: 'pointer', transition: 'all 0.15s ease',
                   }}
                 >
-                  {t.label}
+                  {tb.label}
                 </button>
               ))}
             </div>
 
-            <SectionHeader>Comportement</SectionHeader>
-            <Row label="Minimiser dans le tray" desc="Garder l'app active en arrière-plan">
+            <SectionHeader>{t('settings.ui.behavior')}</SectionHeader>
+            <Row label={t('settings.ui.minimizeToTray')} desc={t('settings.ui.minimizeToTrayDesc')}>
               <Toggle value={local.ui.minimizeToTray} onChange={(v) => set('ui', 'minimizeToTray', v)} label="Tray" />
             </Row>
-            <Row label="Démarrer minimisé">
-              <Toggle value={local.ui.startMinimized} onChange={(v) => set('ui', 'startMinimized', v)} label="Démarrage minimisé" />
+            <Row label={t('settings.ui.startMinimized')}>
+              <Toggle value={local.ui.startMinimized} onChange={(v) => set('ui', 'startMinimized', v)} label={t('settings.ui.startMinimized')} />
             </Row>
-            <Row label="Afficher l'overlay flottant">
+            <Row label={t('settings.ui.showOverlay')}>
               <Toggle value={local.ui.showOverlay} onChange={(v) => set('ui', 'showOverlay', v)} label="Overlay" />
             </Row>
           </div>

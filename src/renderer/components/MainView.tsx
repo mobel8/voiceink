@@ -5,18 +5,20 @@ import {
 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
+import { useTranslation } from '../i18n/useTranslation';
 import { SUPPORTED_LANGUAGES } from '../lib/constants';
 import type { ProcessingMode } from '@shared/types';
+import type { TranslationKey } from '../i18n/translations';
 
-const MODE_PILLS: { mode: ProcessingMode; label: string }[] = [
-  { mode: 'raw',           label: 'Brut'    },
-  { mode: 'email',         label: 'Email'   },
-  { mode: 'short_message', label: 'Message' },
-  { mode: 'meeting_notes', label: 'Notes'   },
-  { mode: 'summary',       label: 'Résumé'  },
-  { mode: 'formal',        label: 'Formel'  },
-  { mode: 'simplified',    label: 'Simple'  },
-  { mode: 'custom',        label: 'Custom'  },
+const MODE_KEYS: { mode: ProcessingMode; key: TranslationKey }[] = [
+  { mode: 'raw',           key: 'mode.raw' },
+  { mode: 'email',         key: 'mode.email' },
+  { mode: 'short_message', key: 'mode.short_message' },
+  { mode: 'meeting_notes', key: 'mode.meeting_notes' },
+  { mode: 'summary',       key: 'mode.summary' },
+  { mode: 'formal',        key: 'mode.formal' },
+  { mode: 'simplified',    key: 'mode.simplified' },
+  { mode: 'custom',        key: 'mode.custom' },
 ];
 
 /* ─── Organic waveform orb ─── */
@@ -122,13 +124,14 @@ function WaveformOrb({
 
 /* ─── Language dropdown ─── */
 function LangDropdown({
-  languages, selected, onSelect, showDisable, disabledCode,
+  languages, selected, onSelect, showDisable, disabledCode, disableLabel,
 }: {
   languages: typeof SUPPORTED_LANGUAGES;
   selected: string;
   onSelect: (code: string) => void;
   showDisable?: boolean;
   disabledCode?: string;
+  disableLabel?: string;
 }) {
   return (
     <div
@@ -152,7 +155,7 @@ function LangDropdown({
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
-            Désactiver
+            {disableLabel || 'Disable'}
           </button>
           <div style={{ margin: '2px 8px', borderTop: '1px solid var(--border)' }} />
         </>
@@ -194,6 +197,7 @@ export function MainView() {
     setRecordingStartTime, setLastTranscriptionMs,
     setCompactMode, compactSize,
   } = useStore();
+  const { t } = useTranslation();
 
   const { isRecording, audioLevel, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
@@ -247,10 +251,10 @@ export function MainView() {
                 }).catch(() => { window.voiceink.injectText(result.text).catch(() => {}); });
               }
             } else {
-              setTranscriptionError('Aucune parole détectée.');
+              setTranscriptionError(t('settings.downloadError'));
             }
           } catch (err: any) {
-            setTranscriptionError(err?.message || 'Erreur de transcription');
+            setTranscriptionError(err?.message || t('file.error'));
           }
         }
         setRecordingState('idle');
@@ -263,7 +267,7 @@ export function MainView() {
         await startRecording();
       }
     } catch (err: any) {
-      setTranscriptionError(err?.message || "Erreur d'enregistrement");
+      setTranscriptionError(err?.message || t('file.error'));
       setRecordingState('idle');
       setRecordingStartTime(null);
     }
@@ -271,7 +275,7 @@ export function MainView() {
     isRecording, recordingState, startRecording, stopRecording,
     setRecordingState, setCurrentText, setProcessedText, selectedMode,
     setLlmStreamText, setRecordingStartTime, setLastTranscriptionMs,
-    selectedLanguage, targetLanguage,
+    selectedLanguage, targetLanguage, t,
   ]);
 
   toggleRef.current = handleToggleRecording;
@@ -299,27 +303,27 @@ export function MainView() {
       navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-      addToast({ type: 'success', message: 'Copié' });
+      addToast({ type: 'success', message: t('common.copied') });
     }
-  }, [processedText, llmStreamText, currentText, addToast]);
+  }, [processedText, llmStreamText, currentText, addToast, t]);
 
   const handleInject = useCallback(() => {
     const text = processedText || llmStreamText || currentText;
     if (text && window.voiceink) {
       window.voiceink.injectText(text);
-      addToast({ type: 'success', message: 'Injecté' });
+      addToast({ type: 'success', message: t('common.injected') });
     }
-  }, [processedText, llmStreamText, currentText, addToast]);
+  }, [processedText, llmStreamText, currentText, addToast, t]);
 
   const handleCompact = () => {
-    // Keep in sync with CompactOverlay.tsx SIZES — square box clipped to circle
     const boxMap = { xs: 104, sm: 134, md: 174 } as const;
     const d      = boxMap[compactSize];
     setCompactMode(true);
     window.voiceink?.setCompactMode(true, d, d);
   };
 
-  const activeModeName = MODE_PILLS.find((p) => p.mode === selectedMode)?.label ?? '';
+  const activeModeKey = MODE_KEYS.find((p) => p.mode === selectedMode);
+  const activeModeName = activeModeKey ? t(activeModeKey.key) : '';
   const hasResults     = !!(currentText || llmStreamText || processedText);
 
   return (
@@ -345,7 +349,7 @@ export function MainView() {
             flex: 1, overflowX: 'auto', padding: '1px 0',
           }}
         >
-          {MODE_PILLS.map(({ mode, label }) => (
+          {MODE_KEYS.map(({ mode, key }) => (
             <button
               key={mode}
               onClick={() => setSelectedMode(mode)}
@@ -356,7 +360,7 @@ export function MainView() {
                 color: selectedMode !== mode ? 'var(--text-muted)' : undefined,
               }}
             >
-              {label}
+              {t(key)}
             </button>
           ))}
         </div>
@@ -405,7 +409,6 @@ export function MainView() {
                 border: targetLanguage ? '1px solid var(--pill-active-border)' : '1px solid transparent',
                 cursor: 'pointer', transition: 'all 0.15s ease',
               }}
-              title="Traduction"
               onMouseEnter={(e) => { if (!targetLanguage) { e.currentTarget.style.background = 'var(--hover-bg)'; e.currentTarget.style.borderColor = 'var(--border)'; } }}
               onMouseLeave={(e) => { if (!targetLanguage && !showTargetLangPicker) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
             >
@@ -419,6 +422,7 @@ export function MainView() {
                 onSelect={(c) => { setTargetLanguage(c); setShowTargetLangPicker(false); }}
                 showDisable
                 disabledCode={selectedLanguage}
+                disableLabel={t('common.cancel')}
               />
             )}
           </div>
@@ -428,7 +432,7 @@ export function MainView() {
           <button
             onClick={handleCompact}
             className="icon-btn"
-            title="Mode compact"
+            title={t('panel.orb')}
             style={{ width: 28, height: 28, borderRadius: 7 }}
           >
             <Minimize2 size={12} />
@@ -587,16 +591,16 @@ export function MainView() {
                   animation: isLlmStreaming ? 'mic-recording 1s ease-in-out infinite' : undefined,
                 }} />
                 <span className="label-xs">
-                  {isLlmStreaming ? 'Traitement…'
-                    : currentText && !processedText && !llmStreamText ? 'Transcription'
-                    : 'Résultat'}
+                  {isLlmStreaming ? t('common.processing')
+                    : currentText && !processedText && !llmStreamText ? t('common.transcription')
+                    : t('common.result')}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 3 }}>
                 <button
                   onClick={handleCopy}
                   className="icon-btn"
-                  title="Copier"
+                  title={t('common.copy')}
                   style={{
                     width: 28, height: 28, borderRadius: 7,
                     color: copied ? 'var(--success)' : undefined,
@@ -607,7 +611,7 @@ export function MainView() {
                 <button
                   onClick={handleInject}
                   className="icon-btn"
-                  title="Coller dans le curseur"
+                  title={t('common.injected')}
                   style={{ width: 28, height: 28, borderRadius: 7 }}
                 >
                   <ClipboardPaste size={12} />
@@ -624,7 +628,7 @@ export function MainView() {
                 <div style={{ marginBottom: (llmStreamText || processedText) ? 14 : 0 }}>
                   {(llmStreamText || processedText) && (
                     <p className="label-xs" style={{ marginBottom: 7 }}>
-                      Original
+                      {t('common.original')}
                     </p>
                   )}
                   <p
