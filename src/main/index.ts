@@ -1,5 +1,11 @@
 import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from 'electron';
 import * as path from 'path';
+
+// GPU crash fix on Linux — must be set before app.whenReady()
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+}
 import { TrayManager } from './tray';
 import { ShortcutManager } from './shortcuts';
 import { registerIpcHandlers } from './ipc';

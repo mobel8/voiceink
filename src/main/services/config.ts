@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   stt: {
     provider: 'groq',
-    localModel: 'base',
+    localModel: 'small',
     language: 'fr',
     autoDetectLanguage: false,
     gpuEnabled: true,

@@ -13,7 +13,7 @@ const api = {
         return () => electron_1.ipcRenderer.removeListener(types_1.IPC.AUDIO_LEVEL, handler);
     },
     // STT
-    transcribe: (audioPath, language) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_TRANSCRIBE, audioPath, language),
+    transcribe: (audioData, language) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_TRANSCRIBE, audioData, language),
     transcribeFileSTT: (filePath) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_TRANSCRIBE_FILE, filePath),
     onSTTResult: (cb) => {
         const handler = (_, result) => cb(result);

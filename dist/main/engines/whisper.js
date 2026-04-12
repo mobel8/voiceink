@@ -85,8 +85,8 @@ class WhisperEngine {
     async initialize() {
         const settings = this.configService.getSettings();
         const modelsDir = this.configService.getModelsPath();
-        // Scan for any available model, preferring tiny (fastest) then base, etc.
-        const modelPriority = ['base', 'tiny', 'small', 'medium', 'large'];
+        // Scan for any available model, preferring larger models for better quality
+        const modelPriority = ['large', 'medium', 'small', 'base', 'tiny'];
         let foundModel = null;
         for (const model of modelPriority) {
             const p = path.join(modelsDir, `ggml-${model}.bin`);
@@ -99,25 +99,25 @@ class WhisperEngine {
             }
         }
         if (!foundModel) {
-            console.log('No whisper model found. Will download tiny on first use.');
+            console.log('No whisper model found. Will download small on first use.');
             this.isReady = false;
         }
-        else if (foundModel === 'tiny') {
-            // Tiny found but base is better — download base in background
-            console.log('Downloading base model in background for better quality...');
-            this.downloadModel('base', (p) => {
-                if (p % 25 === 0)
-                    console.log(`Base model download: ${p}%`);
+        else if (foundModel === 'tiny' || foundModel === 'base') {
+            // Tiny/base found but small is much better — download small in background
+            console.log(`Downloading small model in background for better quality (current: ${foundModel})...`);
+            this.downloadModel('small', (p) => {
+                if (p % 50 === 0)
+                    console.log(`Small model download: ${p}%`);
             }).then(() => {
-                const bp = path.join(modelsDir, 'ggml-base.bin');
-                if (fs.existsSync(bp)) {
-                    this.modelPath = bp;
-                    console.log('Switched to base model (better quality). Restarting server...');
+                const sp = path.join(modelsDir, 'ggml-small.bin');
+                if (fs.existsSync(sp)) {
+                    this.modelPath = sp;
+                    console.log('Switched to small model (better quality). Restarting server...');
                     this.stopServer();
                     this.startServer().catch(() => { });
                 }
             }).catch((err) => {
-                console.log('Base model download failed (will use current model):', err.message);
+                console.log('Small model download failed (will use current model):', err.message);
             });
         }
         // Find binaries - auto-download only on Windows (Linux uses faster-whisper Python)
@@ -348,6 +348,16 @@ class WhisperEngine {
                 return this.transcribeGroqBuffer(audioBuffer, groqKey, lang);
             }
         }
+        // Fast path: send buffer directly to Python server via stdin (no temp file)
+        if (process.platform !== 'win32' && this.pythonServerReady && this.pythonServerProcess) {
+            console.log(`[STT] Python server direct buffer (${audioBuffer.length} bytes, lang=${lang || 'auto'})`);
+            try {
+                return await this.transcribeBufferViaPythonServer(audioBuffer, lang || 'fr');
+            }
+            catch (err) {
+                console.log(`[STT] Python server buffer failed: ${err.message}, falling back to file...`);
+            }
+        }
         // Fallback: write temp file and use normal path
         const tempPath = require('path').join(require('electron').app.getPath('temp'), `voiceink-${Date.now()}.wav`);
         await fs.promises.writeFile(tempPath, audioBuffer);
@@ -371,6 +381,12 @@ class WhisperEngine {
         if (lang) {
             parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${lang}\r\n`));
         }
+        // Prompt for better accuracy — French or English depending on language
+        const groqPrompt = (!lang || lang === 'fr')
+            ? 'Voici une transcription en français avec ponctuation correcte et orthographe précise.'
+            : 'This is a transcription with correct punctuation and spelling.';
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${groqPrompt}\r\n`));
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="temperature"\r\n\r\n0.0\r\n`));
         parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`));
         parts.push(Buffer.from(`--${boundary}--\r\n`));
         const body = Buffer.concat(parts);
@@ -647,7 +663,7 @@ class WhisperEngine {
     }
     // ===== Persistent Python Server (Linux, sub-second transcription) =====
     findPythonBin() {
-        const projectRoot = path.resolve(__dirname, '..', '..', '..');
+        const projectRoot = path.resolve(__dirname.replace('app.asar', 'app.asar.unpacked'), '..', '..', '..');
         const candidates = [
             path.join(projectRoot, '.venv', 'bin', 'python3'),
             path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
@@ -664,11 +680,12 @@ class WhisperEngine {
         return 'python3';
     }
     async startPythonServer() {
-        // Always use tiny for the persistent server — it's 4x faster than base
-        // and keeps latency under 1 second. Base/larger models can be used via CLI fallback.
-        const model = 'tiny';
+        // Use the user's configured model, or small for good quality/speed balance
+        const settings = this.configService.getSettings();
+        const model = settings.stt.localModel || 'small';
         this.pythonBin = this.findPythonBin();
-        const serverScript = path.resolve(__dirname, 'whisper_server.py');
+        // Resolve whisper_server.py — use app.asar.unpacked when packaged (Python can't read from asar)
+        const serverScript = path.resolve(__dirname.replace('app.asar', 'app.asar.unpacked'), 'whisper_server.py');
         if (!fs.existsSync(serverScript)) {
             throw new Error(`whisper_server.py not found at ${serverScript}`);
         }
@@ -756,8 +773,41 @@ class WhisperEngine {
                 });
             };
             this.pythonServerPendingReject = reject;
-            const req = JSON.stringify({ path: audioPath, lang }) + '\n';
+            // Transcription prompt for better accuracy — French punctuation, spelling, and common vocabulary
+            const prompt = lang === 'fr'
+                ? 'Bonjour. Voici une transcription en français, avec une ponctuation correcte et une orthographe précise.'
+                : 'This is a transcription with correct punctuation and spelling.';
+            const req = JSON.stringify({ path: audioPath, lang, prompt }) + '\n';
             this.pythonServerProcess.stdin?.write(req);
+        });
+    }
+    // Fast path: send raw WAV buffer directly to Python server via stdin (no temp file)
+    async transcribeBufferViaPythonServer(audioBuffer, lang) {
+        return new Promise((resolve, reject) => {
+            if (!this.pythonServerProcess || !this.pythonServerReady) {
+                reject(new Error('Python server not ready'));
+                return;
+            }
+            this.pythonServerPendingResolve = (result) => {
+                if (!result) {
+                    reject(new Error('Python server returned error'));
+                    return;
+                }
+                resolve({
+                    text: result.text || '',
+                    language: result.language || lang,
+                    segments: [],
+                    duration: result.duration || 0,
+                });
+            };
+            this.pythonServerPendingReject = reject;
+            const prompt = lang === 'fr'
+                ? 'Bonjour. Voici une transcription en français, avec une ponctuation correcte et une orthographe précise.'
+                : 'This is a transcription with correct punctuation and spelling.';
+            // Send JSON header with size, then raw WAV bytes
+            const header = JSON.stringify({ size: audioBuffer.length, lang, prompt }) + '\n';
+            this.pythonServerProcess.stdin?.write(header);
+            this.pythonServerProcess.stdin?.write(audioBuffer);
         });
     }
     // ===== Python transcription (spawn fallback) =====

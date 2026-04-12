@@ -53,21 +53,27 @@ export function registerIpcHandlers(
   });
 
   // ===== STT Transcription (decoupled from LLM) =====
-  ipcMain.handle(IPC.STT_TRANSCRIBE, async (_event, audioData: string, language?: string) => {
+  ipcMain.handle(IPC.STT_TRANSCRIBE, async (_event, audioData: ArrayBuffer | string, language?: string) => {
     const t0 = Date.now();
     try {
       sendPipelineStatus(mainWindow, { state: 'processing', message: 'Transcription...' });
 
-      // Decode base64 to buffer — fast in-memory operation
+      // Convert to Buffer — zero-copy if ArrayBuffer, base64 decode if string
       let audioBuffer: Buffer;
-      if (audioData.startsWith('data:')) {
-        const commaIdx = audioData.indexOf(',');
-        audioBuffer = Buffer.from(audioData.substring(commaIdx + 1), 'base64');
+      if (typeof audioData === 'string') {
+        // Legacy base64 path (file paths or data URIs)
+        if (audioData.startsWith('data:')) {
+          const commaIdx = audioData.indexOf(',');
+          audioBuffer = Buffer.from(audioData.substring(commaIdx + 1), 'base64');
+        } else {
+          audioBuffer = await fs.promises.readFile(audioData);
+        }
       } else {
-        audioBuffer = await fs.promises.readFile(audioData);
+        // Fast path: ArrayBuffer transferred directly via IPC (zero base64 overhead)
+        audioBuffer = Buffer.from(audioData);
       }
       const tDecode = Date.now();
-      console.log(`[Pipeline] Decode: ${audioBuffer.length} bytes in ${tDecode - t0}ms`);
+      console.log(`[Pipeline] Buffer: ${audioBuffer.length} bytes in ${tDecode - t0}ms`);
 
       const settings = configService.getSettings();
       const isCloudProvider = ['groq', 'openai', 'glm'].includes(settings.stt.provider);
@@ -216,11 +222,11 @@ export function registerIpcHandlers(
     console.log(`[Injection] Injecting ${text.length} chars: "${text.substring(0, 60)}"`);
     const wasVisible = mainWindow.isVisible();
 
-    // Always hide window before paste — even if not focused, the window may
+    // Hide window before paste — even if not focused, the window may
     // be on top and intercept the xdotool keypress on Linux/X11
     if (wasVisible) {
       mainWindow.hide();
-      await new Promise(r => setTimeout(r, 200)); // let OS restore focus to previous app
+      await new Promise(r => setTimeout(r, 50)); // minimal delay for OS focus restore
     }
 
     await textInjector.injectText(text);
@@ -228,7 +234,7 @@ export function registerIpcHandlers(
 
     // Restore window after paste
     if (wasVisible) {
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 30));
       mainWindow.showInactive(); // show without stealing focus
     }
   });

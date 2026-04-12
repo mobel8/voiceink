@@ -13,7 +13,7 @@ const api = {
   },
 
   // STT
-  transcribe: (audioPath: string, language?: string) => ipcRenderer.invoke(IPC.STT_TRANSCRIBE, audioPath, language),
+  transcribe: (audioData: ArrayBuffer | string, language?: string) => ipcRenderer.invoke(IPC.STT_TRANSCRIBE, audioData, language),
   transcribeFileSTT: (filePath: string) => ipcRenderer.invoke(IPC.STT_TRANSCRIBE_FILE, filePath),
   onSTTResult: (cb: (result: any) => void) => {
     const handler = (_: any, result: any) => cb(result);

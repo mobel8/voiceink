@@ -35,6 +35,11 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path = __importStar(require("path"));
+// GPU crash fix on Linux — must be set before app.whenReady()
+if (process.platform === 'linux') {
+    electron_1.app.commandLine.appendSwitch('disable-gpu-compositing');
+    electron_1.app.commandLine.appendSwitch('disable-software-rasterizer');
+}
 const tray_1 = require("./tray");
 const shortcuts_1 = require("./shortcuts");
 const ipc_1 = require("./ipc");

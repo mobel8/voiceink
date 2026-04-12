@@ -37,6 +37,7 @@
     "postcss": "^8.4.49",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.0",
@@ -45,6 +46,7 @@
   "build": {
     "appId": "com.voiceink.app",
     "productName": "VoiceInk",
+    "copyright": "Copyright © 2026 VoiceInk",
     "directories": {
       "output": "release"
     },
@@ -53,22 +55,56 @@
       "assets/**/*",
       "models/**/*"
     ],
+    "asar": true,
+    "asarUnpack": [
+      "dist/main/engines/whisper_server.py",
+      "node_modules/sql.js/**/*.wasm",
+      "node_modules/@electron/remote/**/*"
+    ],
+    "compression": "maximum",
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
           "arch": ["x64"]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "VoiceInk-${version}-${arch}.${ext}",
+      "signAndEditExecutable": false
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "artifactName": "VoiceInk-${version}-mac.${ext}"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "artifactName": "VoiceInk-${version}.${ext}",
+      "desktop": {
+        "Name": "VoiceInk",
+        "Comment": "Dictée vocale intelligente avec post-traitement LLM",
+        "Categories": "AudioVideo;Utility;",
+        "Keywords": "voice;dictation;transcription;whisper;",
+        "StartupNotify": "true"
+      }
     }
   }
 }

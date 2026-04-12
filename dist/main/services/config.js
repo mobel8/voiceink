@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS = {
     },
     stt: {
         provider: 'groq',
-        localModel: 'base',
+        localModel: 'small',
         language: 'fr',
         autoDetectLanguage: false,
         gpuEnabled: true,

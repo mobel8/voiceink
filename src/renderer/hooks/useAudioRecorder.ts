@@ -11,7 +11,7 @@ interface UseAudioRecorderReturn {
   isRecording: boolean;
   audioLevel: number;
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<string | null>;
+  stopRecording: () => Promise<ArrayBuffer | null>;
   error: string | null;
 }
 
@@ -84,17 +84,6 @@ function trimSilence(samples: Float32Array, sampleRate: number): Float32Array {
 
   if (end <= start) return samples; // all silence, return as-is
   return samples.subarray(start, end);
-}
-
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  // Process in 8KB chunks to avoid call stack overflow and speed up encoding
-  const chunks: string[] = [];
-  for (let i = 0; i < bytes.length; i += 8192) {
-    const slice = bytes.subarray(i, Math.min(i + 8192, bytes.length));
-    chunks.push(String.fromCharCode.apply(null, slice as any));
-  }
-  return btoa(chunks.join(''));
 }
 
 export function useAudioRecorder(): UseAudioRecorderReturn {
@@ -172,7 +161,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     }
   }, [updateAudioLevel]);
 
-  const stopRecording = useCallback(async (): Promise<string | null> => {
+  const stopRecording = useCallback(async (): Promise<ArrayBuffer | null> => {
     const t0 = performance.now();
 
     // Disconnect & close everything
@@ -223,11 +212,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     const wavBuf = encodeWav(trimmed, sampleRate);
     const tEncode = performance.now();
 
-    const b64 = arrayBufferToBase64(wavBuf);
-    const tB64 = performance.now();
-
-    console.log(`[Audio] stop=${Math.round(tConcat - t0)}ms trim=${Math.round(tTrim - tConcat)}ms wav=${Math.round(tEncode - tTrim)}ms b64=${Math.round(tB64 - tEncode)}ms | ${trimmed.length} samples ${Math.round(wavBuf.byteLength / 1024)}KB`);
-    return `data:audio/wav;base64,${b64}`;
+    console.log(`[Audio] stop=${Math.round(tConcat - t0)}ms trim=${Math.round(tTrim - tConcat)}ms wav=${Math.round(tEncode - tTrim)}ms | ${trimmed.length} samples ${Math.round(wavBuf.byteLength / 1024)}KB`);
+    return wavBuf;
   }, []);
 
   // Cleanup on unmount
