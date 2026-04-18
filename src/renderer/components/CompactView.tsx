@@ -40,7 +40,6 @@ export function CompactView() {
   } = useStore();
 
   const [justDone, setJustDone] = useState(false);
-  const [hovered, setHovered] = useState(false);
 
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
@@ -126,18 +125,18 @@ export function CompactView() {
 
   const bars = useMiniWaveform(audioLevel, recState === 'recording');
 
-  // Superwhisper-style collapse: tiny dark pill when truly idle and not
-  // being hovered. Any activity (recording / processing / error / done
-  // flash) OR a hover forces the full UI so the user always sees context.
-  const isIdle = recState === 'idle' && !justDone;
-  const isExpanded = !isIdle || hovered;
+  // Superwhisper-style collapse: tiny dark pill when truly idle. Any
+  // activity (recording / processing / error / done flash) forces the
+  // full UI. Hover-to-expand on top of the idle state is handled in CSS
+  // via `:hover`, not React state — using React here caused a hit-test
+  // re-evaluation loop that oscillated between expand and collapse on a
+  // stationary cursor.
+  const isTrueIdle = recState === 'idle' && !justDone;
 
   return (
     <div
-      className={`pill-root state-${recState} ${justDone ? 'done-flash' : ''} ${isExpanded ? 'is-expanded' : 'is-idle'}`}
+      className={`pill-root state-${recState} ${justDone ? 'done-flash' : ''} ${isTrueIdle ? 'is-idle' : 'is-forced-expanded'}`}
       onContextMenu={openContextMenu}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <div className="pill">
         {/*
@@ -149,21 +148,21 @@ export function CompactView() {
           className="pill-idle-face no-drag"
           onClick={toggle}
           onDoubleClick={expand}
-          aria-hidden={isExpanded}
-          tabIndex={isExpanded ? -1 : 0}
+          aria-hidden={!isTrueIdle}
+          tabIndex={isTrueIdle ? 0 : -1}
           title="Démarrer (Espace) · Double-clic = agrandir"
         >
           <span className="pill-idle-dot" />
         </button>
 
         {/* Full face — expanded UI with mic button + body + expand. */}
-        <div className="pill-full" aria-hidden={!isExpanded}>
+        <div className="pill-full" aria-hidden={isTrueIdle}>
           <button
             className="pill-mic no-drag"
             onClick={toggle}
             onDoubleClick={expand}
             disabled={recState === 'processing'}
-            tabIndex={isExpanded ? 0 : -1}
+            tabIndex={isTrueIdle ? -1 : 0}
             title={
               recState === 'recording' ? 'Arrêter (Espace)' :
               recState === 'processing' ? 'Transcription en cours…' :
@@ -206,7 +205,7 @@ export function CompactView() {
           <button
             className="pill-expand no-drag"
             onClick={expand}
-            tabIndex={isExpanded ? 0 : -1}
+            tabIndex={isTrueIdle ? -1 : 0}
             title="Mode confortable"
           >
             <Maximize2 size={11} />

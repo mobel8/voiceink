@@ -2,6 +2,11 @@
   "name": "voiceink",
   "version": "1.0.0",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
+  "author": {
+    "name": "VoiceInk",
+    "email": "voiceink@users.noreply.github.com"
+  },
+  "license": "MIT",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
@@ -12,7 +17,12 @@
     "build:renderer": "vite build",
     "start": "electron dist/main/index.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:all": "npm run build && electron-builder -mwl",
+    "gen:icons": "node scripts/gen-icons.js"
   },
   "dependencies": {
     "electron-store": "^8.2.0",
@@ -29,8 +39,10 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "lucide-react": "^0.460.0",
+    "png-to-ico": "^3.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.0",
@@ -39,30 +51,76 @@
   "build": {
     "appId": "com.voiceink.app",
     "productName": "VoiceInk",
+    "copyright": "Copyright 2025 VoiceInk",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**/*",
-      "assets/**/*",
-      "models/**/*"
+      "assets/**/*"
     ],
+    "asar": true,
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
+        { "target": "nsis", "arch": ["x64"] }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "VoiceInk",
+      "menuCategory": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "uninstallDisplayName": "VoiceInk ${version}"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "VoiceInk ${version}",
+      "icon": "assets/icon.png",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb",      "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility;AudioVideo;Audio",
+      "description": "Intelligent voice-to-text dictation app with LLM post-processing",
+      "synopsis": "Voice dictation with LLM post-processing",
+      "desktop": {
+        "Name": "VoiceInk",
+        "Comment": "Voice dictation with LLM post-processing",
+        "GenericName": "Voice Dictation",
+        "Categories": "Utility;AudioVideo;Audio",
+        "Keywords": "voice;dictation;speech;transcription;whisper;groq"
+      }
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "artifactName": "${productName}_${version}_${arch}.${ext}",
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libsecret-1-0"]
     }
   }
 }

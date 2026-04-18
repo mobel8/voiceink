@@ -13,8 +13,11 @@ export type RecState = 'idle' | 'recording' | 'processing' | 'error';
  */
 function initialDensity(): Settings['density'] {
   if (typeof location === 'undefined') return DEFAULT_SETTINGS.density;
-  const h = (location.hash || '').replace('#', '');
-  if (h === 'compact' || h === 'comfortable') return h;
+  let h = (location.hash || '').replace('#', '');
+  // Strip the optional `-sampler` test suffix appended by main when
+  // VOICEINK_PILL_SAMPLER=1 is set.
+  h = h.replace(/-sampler$/, '');
+  if (h === 'compact' || h === 'comfortable') return h as Settings['density'];
   return DEFAULT_SETTINGS.density;
 }
 

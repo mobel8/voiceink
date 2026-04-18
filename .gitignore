@@ -6,8 +6,14 @@ release/
 .DS_Store
 Thumbs.db
 
-# Local dev helpers (not for source control)
-_run.bat
-_tasks.bat
+# Local dev / test helpers — never committed
+_*.bat
+_*.cmd
 runtime.log
+tmp.cred
 cleanup.js
+test-drag.js
+test-drag2.js
+test-movable.js
+test-hover.js
+test-hover-debug.js

@@ -196,7 +196,12 @@ function buildWindow(density: Density): WindowCtx {
  * density swap flicker-free.
  */
 async function loadRenderer(ctx: WindowCtx): Promise<void> {
-  const hash = ctx.density;
+  // Base hash is the density; append a `-sampler` suffix when
+  // VOICEINK_PILL_SAMPLER=1 is set so the renderer's regression sampler
+  // runs. The suffix is harmless otherwise — the density bootstrap just
+  // ignores anything it doesn't recognise.
+  const sampler = process.env.VOICEINK_PILL_SAMPLER === '1' ? '-sampler' : '';
+  const hash = ctx.density + sampler;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
     if (process.env.VOICEINK_DEVTOOLS === '1' && ctx.density === 'comfortable') {

@@ -30,6 +30,8 @@
       (function () {
         try {
           var h = (location.hash || '').replace('#', '');
+          // Strip optional "-sampler" test suffix.
+          h = h.replace(/-sampler$/, '');
           if (h === 'compact' || h === 'comfortable') {
             document.documentElement.setAttribute('data-density', h);
           }

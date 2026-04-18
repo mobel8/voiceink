@@ -1,0 +1,93 @@
+name: Build installers
+
+on:
+  push:
+    tags:
+      - 'v*'          # build automatically on `git tag v1.2.3 && git push --tags`
+  workflow_dispatch:   # and let you run it on demand from the Actions tab
+
+permissions:
+  contents: write      # needed to attach artifacts to the GitHub Release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            artifact: "release/*-Setup-*.exe"
+          - os: ubuntu-latest
+            name: Linux
+            artifact: |
+              release/*.AppImage
+              release/*.deb
+          - os: macos-latest
+            name: macOS
+            artifact: "release/*.dmg"
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerate icons
+        run: npm run gen:icons
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install fpm (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm && sudo gem install --no-document fpm
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned build — fine for personal distribution, users will
+          # need to right-click → Open on first launch.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: voiceink-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+          generate_release_notes: true

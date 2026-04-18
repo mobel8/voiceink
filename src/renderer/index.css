@@ -706,7 +706,15 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   box-shadow:
-    0 0 0 0.5px rgba(var(--accent-1-rgb), calc(0.10 + 0.15 * var(--glow-intensity))),
+    /* Halo: two tight rings that match the pill's capsule shape exactly
+       (same border-radius) and trace a subtle 5 px outline around the
+       visible pill. Makes the "phantom rectangle" become a phantom
+       capsule and visually hides any DWM-level window outline. */
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 0 4px rgba(255, 255, 255, 0.015),
+    /* Accent glow */
+    0 0 0 5px rgba(var(--accent-1-rgb), calc(0.05 + 0.10 * var(--glow-intensity))),
+    /* Drop shadow */
     0 6px 22px -6px rgba(0, 0, 0, 0.55),
     0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -745,11 +753,18 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   border-radius: 999px;
   background: transparent;
   padding: 0;
-  cursor: pointer;
+  cursor: grab;
   opacity: 0;
-  pointer-events: none;
-  -webkit-app-region: no-drag;
+  /* pointer-events stays `auto` in every state; we switch faces via
+     z-index instead. Toggling pointer-events would cause Chromium to
+     re-hit-test and synthesise stray mouseover/mouseout events, which
+     leaked into our React hover handler and produced an expand/collapse
+     oscillation on a stationary cursor. */
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  z-index: 0;
 }
+.pill-idle-face:active { cursor: grabbing; }
 .pill-idle-dot {
   display: block;
   width: 6px;
@@ -757,6 +772,7 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.55);
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
+  -webkit-app-region: drag;
 }
 .pill-full {
   display: flex;
@@ -765,6 +781,14 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   padding: 3px 6px 3px 4px;
   opacity: 1;
   transition: opacity 0.18s ease;
+  /* Always hit-testable — z-index decides which face is on top (see
+     comment on .pill-idle-face). */
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+.pill-body {
+  -webkit-app-region: drag;
 }
 
 /* Collapsed state — tiny dark oval centred in the window (Superwhisper). */
@@ -775,32 +799,69 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   background: rgba(10, 10, 12, 0.88);
   border-color: rgba(255, 255, 255, 0.06);
   box-shadow:
+    /* Same capsule halo as expanded, slightly tighter since the pill
+       is small. Keeps the "rounded square" framing around the idle dot
+       the user asked for while staying extremely discreet. */
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 0 3px rgba(255, 255, 255, 0.015),
     0 3px 10px -2px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   /* Don't stack the aurora/glow when at rest — we want it very discreet. */
   animation: none !important;
 }
+/* Idle + hover: inherit the regular expanded pill look. All values here
+   revert the idle overrides above; the pill grows back to the default
+   100% × 44 px glass capsule. */
+.pill-root.is-idle:hover .pill {
+  width: 100%;
+  height: 44px;
+  padding: 3px 6px 3px 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 0 4px rgba(255, 255, 255, 0.015),
+    0 0 0 5px rgba(var(--accent-1-rgb), calc(0.05 + 0.10 * var(--glow-intensity))),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+/* Idle (default) face visible. */
 .pill-root.is-idle .pill-full {
   opacity: 0;
-  pointer-events: none;
+  z-index: 0;
 }
 .pill-root.is-idle .pill-idle-face {
   opacity: 1;
-  pointer-events: auto;
+  z-index: 1;
 }
 .pill-root.is-idle .pill-idle-face:hover .pill-idle-dot {
   background: rgba(255, 255, 255, 0.85);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
 }
 
-/* Expanded state — explicit just to pair with is-idle for clarity. */
-.pill-root.is-expanded .pill-idle-face {
+/* Forced-expanded (recording, processing, error, done flash) — full UI
+   regardless of hover. */
+.pill-root.is-forced-expanded .pill-idle-face {
   opacity: 0;
-  pointer-events: none;
+  z-index: 0;
 }
-.pill-root.is-expanded .pill-full {
+.pill-root.is-forced-expanded .pill-full {
   opacity: 1;
-  pointer-events: auto;
+  z-index: 1;
+}
+
+/* Idle + mouse over: swap the faces in pure CSS — React is NOT involved,
+   so we can't re-enter the hit-test / re-render loop that used to cause
+   the hover oscillation. Chromium's :hover state updates at paint time
+   only and is inherently stable. */
+.pill-root.is-idle:hover .pill-idle-face {
+  opacity: 0;
+  z-index: 0;
+}
+.pill-root.is-idle:hover .pill-full {
+  opacity: 1;
+  z-index: 1;
 }
 
 /* State-driven glow */
