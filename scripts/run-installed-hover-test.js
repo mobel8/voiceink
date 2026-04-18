@@ -2,25 +2,23 @@
  * Regression test that runs against the ACTUAL INSTALLED VoiceInk.exe,
  * not the dev loopback.
  *
- * Current UX contract — "dot-only hover expands" (Option D):
- *   - The black capsule is 52×20 px, centred in the 176×55 pill
- *     window. Hovering ANY pixel of that capsule (and only that
- *     capsule) must expand the pill.
- *   - Hovering the transparent margin, the invisible mic footprint,
- *     the invisible expand footprint, or the corners must leave the
- *     pill retracted.
+ * Current UX contract — "Superwhisper-style wide-pill hover":
+ *   - The black pill indicator is ~140×26 px, centred in the 176×55
+ *     window. Hovering ANY pixel of the VISIBLE pill expands the UI.
+ *   - The ~18 px transparent margin left/right + ~14 px top/bottom
+ *     of the window are INERT — hovering them does nothing.
  *   - Once expanded, hovering the `.pill-full` UI (the mic + expand
  *     buttons that are now visible) must KEEP it expanded so the
- *     user can actually click them — this retention is handled by
- *     the `:has(.pill-full:hover)` sibling rule in index.css.
- *   - Leaving the window collapses back to the dot.
+ *     user can actually click them — retention is the
+ *     `:has(.pill-full:hover)` sibling rule in index.css.
+ *   - Leaving the window collapses back to the retracted pill.
  *
- * We drive CDP Input.dispatchMouseEvent to each probe and check
- * getComputedStyle(.pill-full).opacity.
+ * We discover the capsule rect at runtime via getBoundingClientRect
+ * so the probes survive future resize tweaks without edits.
  *
- * Force VOICEINK_FORCE_DENSITY=compact so main opens a 176×55 pill
- * regardless of the persisted `density` — that also exercises the
- * density-pinning fix in useStore.
+ * VOICEINK_FORCE_DENSITY=compact forces a 176×55 pill regardless of
+ * the persisted `density` — that also exercises the density-pinning
+ * fix in useStore.
  */
 const { spawn, execSync } = require('child_process');
 const path = require('path');
@@ -176,28 +174,29 @@ async function evalJS(cdp, js) {
       })()`);
     }
 
-    // Capsule rect at standard 176×55 geometry: x=62..114, y=18..38
-    // (52×20 centred on (88,28)). We probe interior points that must
-    // expand and exterior points that must stay retracted.
+    // Superwhisper-style wide pill: the capsule rect is measured at
+    // runtime, so probe coordinates are derived from geom.cap and stay
+    // correct no matter what size the capsule takes in future tweaks.
     const cx = geom.cap.x, cy = geom.cap.y;
-    const M_IN = 3;   // margin inside capsule edge (px) — safely away from hit-test edge
+    const hW = geom.cap.halfW, hH = geom.cap.halfH;
+    const M_IN = 3;   // margin inside capsule edge (px)
     const M_OUT = 3;  // margin outside capsule edge (px)
     const probes = [
-      // --- INSIDE THE CAPSULE → must expand ---
-      { name: 'dot-centre',          x: cx,                            y: cy,                            expect: 'expand' },
-      { name: 'dot-inner-left',      x: cx - geom.cap.halfW + M_IN,    y: cy,                            expect: 'expand' },
-      { name: 'dot-inner-right',     x: cx + geom.cap.halfW - M_IN,    y: cy,                            expect: 'expand' },
-      { name: 'dot-inner-top',       x: cx,                            y: cy - geom.cap.halfH + M_IN,    expect: 'expand' },
-      { name: 'dot-inner-bottom',    x: cx,                            y: cy + geom.cap.halfH - M_IN,    expect: 'expand' },
-      // --- OUTSIDE THE CAPSULE → must retract ---
-      { name: 'just-outside-left',   x: cx - geom.cap.halfW - M_OUT,   y: cy,                            expect: 'retract' },
-      { name: 'just-outside-right',  x: cx + geom.cap.halfW + M_OUT,   y: cy,                            expect: 'retract' },
-      { name: 'just-above-dot',      x: cx,                            y: cy - geom.cap.halfH - M_OUT,   expect: 'retract' },
-      { name: 'just-below-dot',      x: cx,                            y: cy + geom.cap.halfH + M_OUT,   expect: 'retract' },
-      { name: 'mic-area',            x: 22,                            y: cy,                            expect: 'retract' },
-      { name: 'expand-area',         x: geom.v.w - 22,                 y: cy,                            expect: 'retract' },
-      { name: 'top-left-corner',     x: 4,                             y: 4,                             expect: 'retract' },
-      { name: 'bottom-right-corner', x: geom.v.w - 4,                  y: geom.v.h - 4,                  expect: 'retract' },
+      // --- INSIDE THE VISIBLE PILL → must expand ---
+      { name: 'pill-centre',         x: cx,              y: cy,              expect: 'expand' },
+      { name: 'pill-inner-left',     x: cx - hW + M_IN,  y: cy,              expect: 'expand' },
+      { name: 'pill-inner-right',    x: cx + hW - M_IN,  y: cy,              expect: 'expand' },
+      { name: 'pill-inner-top',      x: cx,              y: cy - hH + M_IN,  expect: 'expand' },
+      { name: 'pill-inner-bottom',   x: cx,              y: cy + hH - M_IN,  expect: 'expand' },
+      // --- OUTSIDE THE VISIBLE PILL → must retract ---
+      { name: 'outside-left',        x: cx - hW - M_OUT, y: cy,              expect: 'retract' },
+      { name: 'outside-right',       x: cx + hW + M_OUT, y: cy,              expect: 'retract' },
+      { name: 'outside-top',         x: cx,              y: cy - hH - M_OUT, expect: 'retract' },
+      { name: 'outside-bottom',      x: cx,              y: cy + hH + M_OUT, expect: 'retract' },
+      { name: 'top-left-corner',     x: 4,               y: 4,               expect: 'retract' },
+      { name: 'top-right-corner',    x: geom.v.w - 4,    y: 4,               expect: 'retract' },
+      { name: 'bottom-left-corner',  x: 4,               y: geom.v.h - 4,    expect: 'retract' },
+      { name: 'bottom-right-corner', x: geom.v.w - 4,    y: geom.v.h - 4,    expect: 'retract' },
     ];
 
     let failed = 0;
@@ -213,21 +212,27 @@ async function evalJS(cdp, js) {
       if (!ok) failed++;
     }
 
-    // Retention sweep: land on the dot, then slide to the mic button
-    // (which is only revealed once the pill has expanded) and to the
-    // expand button on the right. Both should keep fullOp at 1.
+    // Retention sweep: land on the capsule, then slide to points that
+    // are OUTSIDE the 140-wide capsule but INSIDE the surrounding
+    // .pill-full (which covers the full 176-wide pill rect once the
+    // pill has expanded). Both must keep fullOp at 1 — that's the
+    // whole purpose of the `:has(.pill-full:hover)` retention rule,
+    // so the user can reach the mic and expand buttons that sit past
+    // the capsule edges.
     await clearHover();
     await moveTo(cx, cy);  await sleep(260);
-    await moveTo(22, cy);  await sleep(240);
+    const leftProbe = 10; // well inside pill-full, ~8 px outside capsule
+    await moveTo(leftProbe, cy); await sleep(240);
     const atMic = await snap();
     const retainMicOK = parseFloat(atMic.fullOp) > 0.5;
-    console.log('  ' + (retainMicOK ? 'OK ' : 'FAIL') + '  retention-mic          (22,' + Math.round(cy) + ')  fullOp=' + atMic.fullOp);
+    console.log('  ' + (retainMicOK ? 'OK ' : 'FAIL') + '  retention-mic          (' + leftProbe + ',' + Math.round(cy) + ')  fullOp=' + atMic.fullOp);
     if (!retainMicOK) failed++;
 
-    await moveTo(geom.v.w - 22, cy); await sleep(240);
+    const rightProbe = geom.v.w - 10;
+    await moveTo(rightProbe, cy); await sleep(240);
     const atExpand = await snap();
     const retainExpandOK = parseFloat(atExpand.fullOp) > 0.5;
-    console.log('  ' + (retainExpandOK ? 'OK ' : 'FAIL') + '  retention-expand       (' + (geom.v.w - 22) + ',' + Math.round(cy) + ')  fullOp=' + atExpand.fullOp);
+    console.log('  ' + (retainExpandOK ? 'OK ' : 'FAIL') + '  retention-expand       (' + rightProbe + ',' + Math.round(cy) + ')  fullOp=' + atExpand.fullOp);
     if (!retainExpandOK) failed++;
 
     // Collapse

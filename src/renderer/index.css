@@ -828,8 +828,15 @@ html[data-shimmer="1"] .glass-strong:hover::before {
    button underneath. */
 .pill-idle-capsule {
   position: relative;
-  width: 52px;
-  height: 20px;
+  /* Superwhisper-style wide pill indicator. Spans most of the 176 px
+     window so there is NO invisible "dead margin" in the user's
+     mental model: the thing they see IS the hover target. Hovering
+     any pixel of this 140×26 black pill opens the full UI; the
+     18 px transparent margin on each side + the 14 px top/bottom
+     transparent strips stay inert. Matches the visual footprint of
+     Superwhisper's always-active mini recording window. */
+  width: 140px;
+  height: 26px;
   border-radius: 999px;
   background: rgba(10, 10, 12, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -843,9 +850,9 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   opacity: 0;
   /* Pure opacity fade — NO transform. Scaling the capsule mid-hover
      would shrink its hit-test box out from under a cursor sitting
-     right at the 52×20 edge, dropping :hover for a frame and
-     re-triggering the old expand/collapse oscillation. Keeping the
-     box fixed at 52×20 makes the entry hit-test rock-solid. */
+     right at the edge, dropping :hover for a frame and re-triggering
+     the old expand/collapse oscillation. Keeping the box fixed at
+     140×26 makes the entry hit-test rock-solid. */
   transition: opacity 0.22s ease;
 }
 /* Collapsed (idle, not hovered-on-dot): glass body transparent, small
@@ -861,18 +868,18 @@ html[data-shimmer="1"] .glass-strong:hover::before {
 .pill-root.is-idle .pill-idle-capsule {
   opacity: 1;
 }
-/* Idle + hover on the visible 52×20 black capsule only: glass body
-   re-appears, capsule fades out. The capsule has a solid
-   rgba(10,10,12,0.92) background so :hover on it is hit-test-stable
-   in Electron's transparent window — no alpha-0 pixels for DWM to
-   punch through, no mid-animation :hover flip. Entry gate =
-   .pill-idle-capsule:hover. Retention = .pill-full:hover (kicks in
-   once the face/full z-index flip has happened, so the user can
-   move onto the mic / expand buttons inside the expanded pill
-   without it snapping shut). Hovering any other pixel of the
-   176×55 window — including the transparent margin, the mic
-   footprint, the expand footprint, the corners — leaves the pill
-   retracted, which is the whole point of the dot affordance. */
+/* Idle + hover on the visible 140×26 Superwhisper-style pill: glass
+   body re-appears, capsule fades out, mic + expand buttons become
+   visible. The capsule has a solid rgba(10,10,12,0.92) background so
+   :hover on it is hit-test-stable in Electron's transparent window —
+   no alpha-0 pixels for DWM to punch through, no mid-animation :hover
+   flip. Entry gate = .pill-idle-capsule:hover. Retention =
+   .pill-full:hover (kicks in once the face/full z-index flip has
+   happened, so the user can move onto the mic / expand buttons inside
+   the expanded pill without it snapping shut). The 18 px transparent
+   strips left/right of the capsule and the 14 px strips above/below
+   stay inert — hovering them does nothing, matching Superwhisper's
+   contract that the visible pill IS the hover target. */
 .pill-root.is-idle:has(.pill-idle-capsule:hover) .pill,
 .pill-root.is-idle:has(.pill-full:hover) .pill {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
