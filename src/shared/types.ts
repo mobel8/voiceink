@@ -27,20 +27,64 @@ export interface Replacement {
   enabled: boolean;
 }
 
+/**
+ * Prompt templates for each post-processing mode.
+ *
+ * They use `{{LANG}}` as a placeholder for the human-readable language
+ * name ("French", "English", "Japanese"…) injected at runtime by
+ * `postProcess()` based on whatever Whisper detected (or the user
+ * explicitly selected).
+ *
+ * The prompts are deliberately written in English because every major
+ * LLM (Groq's llama-3.3, GPT-4o, Claude, Ollama models) follows English
+ * instructions more reliably than localised ones. Experimentally, a
+ * French system prompt biases the output language even when told "keep
+ * the original language" — so we state the language twice, once as a
+ * hard instruction ("RESPOND IN {{LANG}}") and once as context.
+ *
+ * Each prompt also includes an anti-preamble clause because Llama-style
+ * models love to prepend things like "Here is the rewritten email:".
+ */
 export const MODE_PROMPTS: Record<Mode, string> = {
   raw: '',
   email:
-    "Reformule ce texte dicté en email professionnel clair et poli. Garde la langue originale. Corrige la ponctuation et la grammaire. Retourne UNIQUEMENT le texte final, sans préambule.",
+    `You are rewriting a dictated voice note into a professional, polite email in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate to another language.` +
+    ` Fix punctuation, grammar and capitalisation. Keep all facts, numbers and names exact.` +
+    ` MANDATORY STRUCTURE: (1) a proper GREETING on the first line (e.g. "Bonjour", "Hello", "Hola", "Sehr geehrte Damen und Herren", "お世話になります"),` +
+    ` (2) the body of the email, (3) a proper CLOSING on the last line (e.g. "Cordialement", "Best regards", "Un saludo", "Mit freundlichen Grüßen", "よろしくお願いいたします").` +
+    ` Both greeting and closing are required — never omit either.` +
+    ` OUTPUT RULES: return ONLY the final email text, no preamble, no quotes, no markdown fences, no commentary.`,
   message:
-    "Transforme ce texte dicté en message court et naturel. Garde la langue originale. Corrige fautes et ponctuation. Retourne UNIQUEMENT le texte final.",
+    `You are rewriting a dictated voice note into a short natural chat message in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Fix typos, punctuation and capitalisation. Keep it concise (1-3 sentences) and conversational.` +
+    ` The output MUST be shorter than the input — compress filler words, repetitions and hesitations.` +
+    ` OUTPUT RULES: return ONLY the final message, no preamble, no quotes, no markdown, no commentary.`,
   meeting:
-    "Structure ce texte dicté en notes de réunion claires avec puces et sections si pertinent. Garde la langue originale. Retourne UNIQUEMENT les notes.",
+    `You are turning a dictated voice note into clear meeting notes in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` MANDATORY STRUCTURE: use plain markdown bullet points starting with "- " (one per line).` +
+    ` Group by topic if relevant, keep every fact, decision and action item.` +
+    ` OUTPUT RULES: return ONLY the bulleted notes, no preamble, no commentary, no code fences.`,
   summary:
-    "Résume ce texte dicté de manière concise. Garde la langue originale. Retourne UNIQUEMENT le résumé.",
+    `You are summarising a dictated voice note into a concise synthesis in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Keep the key facts, compress redundancy, remove filler words. The output MUST be shorter than the input — aim for ~40% of the original length, never more than 80%.` +
+    ` OUTPUT RULES: return ONLY the summary, no preamble, no quotes, no commentary.`,
   formal:
-    "Reformule ce texte dicté dans un registre formel et soutenu. Garde la langue originale. Retourne UNIQUEMENT le texte final.",
+    `You are rewriting a dictated voice note in a formal, polished register in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Remove every hesitation / filler word: in French "euh, ben, bah, ouais, voilà, du coup, alors" at the start of a sentence;` +
+    ` in English "um, uh, yeah, gonna, gotta, alright, so"; equivalents in Spanish, German, Japanese.` +
+    ` Replace colloquial vocabulary with standard register, use full sentences and correct punctuation.` +
+    ` Keep ALL facts, numbers, names and dates intact.` +
+    ` OUTPUT RULES: return ONLY the rewritten text, no preamble, no quotes, no commentary.`,
   simple:
-    "Reformule ce texte dicté de façon simple et claire. Garde la langue originale. Retourne UNIQUEMENT le texte final.",
+    `You are rewriting a dictated voice note in plain, accessible language in {{LANG}}.` +
+    ` RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Short sentences, common vocabulary, keep every fact. Target ~CEFR B1 level readability.` +
+    ` OUTPUT RULES: return ONLY the rewritten text, no preamble, no quotes, no commentary.`,
 };
 
 export type Density = 'comfortable' | 'compact';

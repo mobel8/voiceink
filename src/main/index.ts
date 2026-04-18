@@ -292,7 +292,9 @@ function disposeCtx(ctx: WindowCtx): void {
 }
 
 async function createWindow(): Promise<void> {
-  const density = getSettings().density;
+  const forced = process.env.VOICEINK_FORCE_DENSITY as Density | undefined;
+  const density: Density =
+    forced === 'compact' || forced === 'comfortable' ? forced : getSettings().density;
   const ctx = buildWindow(density);
   current = ctx;
 
@@ -482,6 +484,16 @@ function installNavigationGuards(): void {
       cb(false);
     });
   });
+}
+
+// Test-only: expose Chrome DevTools Protocol on :9222 so the hover /
+// drag regression harness can dispatch Input.dispatchMouseEvent (the
+// only reliable way to trigger mouse events in a transparent
+// alwaysOnTop window on Windows — SendInput is silently dropped) and
+// read the renderer console in real time. Never set in production.
+if (process.env.VOICEINK_CDP === '1') {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+  app.commandLine.appendSwitch('remote-allow-origins', '*');
 }
 
 app.whenReady().then(async () => {

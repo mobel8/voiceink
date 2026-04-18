@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+INSTALL/
 .env
 *.log
 .DS_Store
@@ -21,3 +22,18 @@ scripts/git-status.bat
 scripts/kill-electron.bat
 scripts/touchfile.bat
 scripts/move-workflow.bat
+scripts/run-modes-session.bat
+scripts/show-config.bat
+scripts/ls-config.bat
+scripts/env-dump.bat
+scripts/commit-msg.txt
+scripts/commit.bat
+scripts/do-commit.bat
+scripts/push.bat
+scripts/echeck.bat
+scripts/launch-pill.bat
+scripts/prepare-install.bat
+scripts/dist-win.bat
+scripts/cleanup.bat
+scripts/_*.bat
+scripts/_msg.txt

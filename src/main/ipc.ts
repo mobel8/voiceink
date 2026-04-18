@@ -134,12 +134,17 @@ export function registerIpc(): void {
       }
 
       // LLM post-processing operates on whichever text we'll present
-      // (translated if any, else raw) so the reformulation is in the target language.
+      // (translated if any, else raw) so the reformulation is in the
+      // final target language. postProcess resolves the {{LANG}}
+      // placeholder internally from (1) the explicit translation
+      // target, (2) Whisper's detected language, or (3) the user's
+      // language setting — in that order.
       let final = translated ?? rawText;
-      if (settings.llmEnabled && req.mode !== 'raw') {
+      if (req.mode !== 'raw') {
         const ps = Date.now();
-        final = await postProcess(final, req.mode, settings);
-        console.log(`[transcribe] llm post-process: ${Date.now() - ps}ms`);
+        const langHint = translateTo || r.language;
+        final = await postProcess(final, req.mode, settings, langHint);
+        console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms`);
       }
 
       const durationMs = Date.now() - t0;

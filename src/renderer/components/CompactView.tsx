@@ -252,24 +252,31 @@ export function CompactView() {
   );
 }
 
-// Short waveform for the pill (12 bars, tiny amplitude).
+// Short waveform for the pill (12 bars, tiny amplitude). Animates only
+// while `active` is true; when idle, it collapses to a resting array
+// exactly ONCE and stops — no 70 ms re-render loop. This matters because
+// every React commit reconciles the pill's descendants, and on Windows +
+// transparent compositor that occasionally invalidates the pill's
+// composited layer and flips :hover to false under a stationary cursor.
 function useMiniWaveform(level: number, active: boolean): number[] {
   const [bars, setBars] = useState<number[]>(() => new Array(12).fill(3));
   const levelRef = useRef(level);
-  const activeRef = useRef(active);
   levelRef.current = level;
-  activeRef.current = active;
   useEffect(() => {
+    if (!active) {
+      // Reset to rest exactly once, then stay quiet.
+      setBars((prev) => (prev.every((b) => b === 3) ? prev : new Array(12).fill(3)));
+      return;
+    }
     const id = setInterval(() => {
       setBars((prev) => {
         const next = prev.slice(1);
-        const v = activeRef.current ? 3 + levelRef.current * 14 + Math.random() * 2 : 3;
-        next.push(v);
+        next.push(3 + levelRef.current * 14 + Math.random() * 2);
         return next;
       });
     }, 70);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
   return bars;
 }
 

@@ -1,5 +1,9 @@
 // Optional LLM post-processing. Uses Groq chat completions by default
-// (very low latency) or OpenAI if configured.
+// (very low latency) or OpenAI / Anthropic / Ollama if configured.
+//
+// Designed to be self-contained and *loud*: every branch logs enough
+// context that the user can diagnose "why didn't my mode apply?" from
+// runtime.log alone — missing API key, HTTP error, empty choice, etc.
 
 import { Mode, MODE_PROMPTS, Settings } from '../../shared/types';
 
@@ -10,57 +14,149 @@ const LANGUAGE_NAMES: Record<string, string> = {
   ar: 'Arabic',
 };
 
+/**
+ * Resolve the human-readable language name the model should respond in.
+ *
+ * Priority:
+ *  1. Whisper's detected language (passed by the caller).
+ *  2. The user's explicit language setting, if not 'auto'.
+ *  3. Literal fallback "the same language as the input" — the model
+ *     infers from the user message.
+ */
+function resolveLangName(settings: Settings, hint?: string): string {
+  const code = (hint || '').toLowerCase();
+  if (code && LANGUAGE_NAMES[code]) return LANGUAGE_NAMES[code];
+  const pref = (settings.language || '').toLowerCase();
+  if (pref && pref !== 'auto' && LANGUAGE_NAMES[pref]) return LANGUAGE_NAMES[pref];
+  return 'the same language as the input';
+}
+
+/**
+ * Is the LLM post-processing layer effectively available?
+ *
+ * We honour `llmEnabled` as a hard off-switch, but treat its default
+ * (undefined / false) leniently: if the user picked a non-raw mode AND
+ * a provider key is reachable, the intent is clearly "apply the mode",
+ * so we do. This fixes the older behaviour where users selected a mode
+ * in the UI but silently got the raw Whisper text because they never
+ * toggled "Activer LLM" in settings.
+ */
+function isLlmAvailable(settings: Settings): boolean {
+  if (settings.llmEnabled === false) return false;
+  const p = settings.llmProvider || 'groq';
+  if (p === 'ollama') return true; // local, no key needed
+  if (p === 'groq') return !!(settings.groqApiKey || settings.llmApiKey);
+  return !!settings.llmApiKey;
+}
+
 export async function postProcess(
   text: string,
   mode: Mode,
   settings: Settings,
+  languageHint?: string,
 ): Promise<string> {
-  if (!settings.llmEnabled || mode === 'raw' || !text.trim()) return text;
+  if (mode === 'raw' || !text.trim()) return text;
+  if (!isLlmAvailable(settings)) {
+    console.warn(`[llm] mode=${mode} requested but no provider available — returning raw text. ` +
+      `Set settings.groqApiKey or settings.llmApiKey, or switch provider to 'ollama'.`);
+    return text;
+  }
 
-  const prompt = MODE_PROMPTS[mode];
-  if (!prompt) return text;
+  const template = MODE_PROMPTS[mode];
+  if (!template) {
+    console.warn(`[llm] unknown mode ${mode}, returning raw text`);
+    return text;
+  }
 
-  const provider = settings.llmProvider;
+  const langName = resolveLangName(settings, languageHint);
+  const prompt = template.replace(/\{\{LANG\}\}/g, langName);
+
+  const provider = settings.llmProvider || 'groq';
+  console.log(`[llm] postProcess mode=${mode} provider=${provider} lang=${langName} ` +
+    `input=${text.length}ch`);
+
   try {
-    if (provider === 'groq') return await callOpenAICompat(text, prompt, settings, 'https://api.groq.com/openai/v1/chat/completions', settings.groqApiKey || settings.llmApiKey, settings.llmModel);
-    if (provider === 'openai') return await callOpenAICompat(text, prompt, settings, 'https://api.openai.com/v1/chat/completions', settings.llmApiKey, settings.llmModel || 'gpt-4o-mini');
-    if (provider === 'ollama') return await callOllama(text, prompt, settings);
-    if (provider === 'anthropic') return await callAnthropic(text, prompt, settings);
+    let out = text;
+    if (provider === 'groq') {
+      out = await callOpenAICompat(text, prompt, 'https://api.groq.com/openai/v1/chat/completions',
+        settings.groqApiKey || settings.llmApiKey,
+        settings.llmModel || 'llama-3.3-70b-versatile',
+        'groq');
+    } else if (provider === 'openai') {
+      out = await callOpenAICompat(text, prompt, 'https://api.openai.com/v1/chat/completions',
+        settings.llmApiKey, settings.llmModel || 'gpt-4o-mini', 'openai');
+    } else if (provider === 'ollama') {
+      out = await callOllama(text, prompt, settings);
+    } else if (provider === 'anthropic') {
+      out = await callAnthropic(text, prompt, settings);
+    }
+    console.log(`[llm] postProcess done → ${out.length}ch`);
+    return out;
   } catch (err: any) {
     console.error('[llm] postProcess failed, returning raw text:', err?.message || err);
     return text;
   }
-  return text;
 }
 
 async function callOpenAICompat(
   text: string,
   system: string,
-  _settings: Settings,
   url: string,
   apiKey: string,
   model: string,
+  label: string,
 ): Promise<string> {
-  if (!apiKey) return text;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: text },
-      ],
-    }),
+  if (!apiKey) {
+    console.warn(`[llm:${label}] no API key — cannot post-process`);
+    return text;
+  }
+  const body = JSON.stringify({
+    model,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ],
   });
-  if (!res.ok) return text;
-  const data = (await res.json()) as any;
-  const out = data?.choices?.[0]?.message?.content;
-  return typeof out === 'string' && out.trim() ? out.trim() : text;
+
+  // Retry on 429 (rate limit) and 5xx with exponential backoff. When
+  // Groq embeds a "try again in Xs" hint we honour it instead of our
+  // own schedule — usually faster.
+  const backoff = [1000, 2000, 4000];
+  for (let attempt = 0; attempt <= backoff.length; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    });
+    if (res.ok) {
+      const data = (await res.json()) as any;
+      const out = data?.choices?.[0]?.message?.content;
+      if (typeof out !== 'string' || !out.trim()) {
+        console.warn(`[llm:${label}] empty / non-string response:`, JSON.stringify(data).slice(0, 200));
+        return text;
+      }
+      return stripCodeFences(out.trim());
+    }
+
+    const retryable = res.status === 429 || (res.status >= 500 && res.status < 600);
+    const errBody = await res.text().catch(() => '');
+    if (!retryable || attempt === backoff.length) {
+      console.warn(`[llm:${label}] HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+      return text;
+    }
+
+    // Parse optional "try again in <N>s" hint.
+    let wait = backoff[attempt];
+    const hint = errBody.match(/try again in ([0-9.]+)s/i);
+    if (hint) wait = Math.max(wait, Math.ceil(parseFloat(hint[1]) * 1000));
+    console.warn(`[llm:${label}] HTTP ${res.status} — retry ${attempt + 1}/${backoff.length} in ${wait}ms`);
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  return text;
 }
 
 async function callOllama(text: string, system: string, settings: Settings): Promise<string> {
@@ -76,13 +172,21 @@ async function callOllama(text: string, system: string, settings: Settings): Pro
       ],
     }),
   });
-  if (!res.ok) return text;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.warn(`[llm:ollama] HTTP ${res.status}: ${body.slice(0, 300)}`);
+    return text;
+  }
   const data = (await res.json()) as any;
-  return data?.message?.content?.trim() || text;
+  const out = data?.message?.content?.trim();
+  return out ? stripCodeFences(out) : text;
 }
 
 async function callAnthropic(text: string, system: string, settings: Settings): Promise<string> {
-  if (!settings.llmApiKey) return text;
+  if (!settings.llmApiKey) {
+    console.warn('[llm:anthropic] no API key');
+    return text;
+  }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -97,10 +201,24 @@ async function callAnthropic(text: string, system: string, settings: Settings): 
       messages: [{ role: 'user', content: text }],
     }),
   });
-  if (!res.ok) return text;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.warn(`[llm:anthropic] HTTP ${res.status}: ${body.slice(0, 300)}`);
+    return text;
+  }
   const data = (await res.json()) as any;
   const out = data?.content?.[0]?.text;
-  return typeof out === 'string' && out.trim() ? out.trim() : text;
+  return typeof out === 'string' && out.trim() ? stripCodeFences(out.trim()) : text;
+}
+
+/**
+ * Some models wrap their output in ``` markdown fences even when told
+ * not to. Strip a single outer fence if present (keeps inner fences —
+ * e.g. a code snippet inside the message — intact).
+ */
+function stripCodeFences(s: string): string {
+  const m = s.match(/^```[a-zA-Z]*\n([\s\S]*?)\n```$/);
+  return m ? m[1].trim() : s;
 }
 
 /**
