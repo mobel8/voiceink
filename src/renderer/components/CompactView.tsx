@@ -125,6 +125,40 @@ export function CompactView() {
 
   const bars = useMiniWaveform(audioLevel, recState === 'recording');
 
+  // Regression sampler for the hover oscillation test. Dormant in
+  // production; activated only when main sets VOICEINK_PILL_SAMPLER=1
+  // (which appends "-sampler" to the URL hash). Samples the pill's
+  // rendered width and :hover state every 100 ms so `test-hover.js` can
+  // assert the expansion is monotonically stable on a stationary
+  // cursor.
+  useEffect(() => {
+    if (!window.location.hash.includes('sampler')) return;
+    let mmCount = 0;
+    const onMM = () => { mmCount++; };
+    window.addEventListener('mousemove', onMM);
+    const id = setInterval(() => {
+      const pill = document.querySelector('.pill') as HTMLElement | null;
+      const compact = document.querySelector('.density-compact') as HTMLElement | null;
+      const w = pill?.getBoundingClientRect().width ?? 0;
+      const hover = !!compact?.matches(':hover');
+      const bg = pill ? getComputedStyle(pill).backgroundImage : 'none';
+      const isGlass = bg && bg !== 'none' && bg.includes('linear-gradient');
+      // Ground-truth: what element is Chromium actually hit-testing at
+      // the window centre? If this is null, the pixel is click-through
+      // at the DWM level (transparent compositor output) and :hover
+      // can NEVER fire whatever we do in CSS.
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const hitEl = document.elementFromPoint(cx, cy);
+      const hitClass = hitEl ? (hitEl.className || hitEl.tagName) : 'null';
+      console.log(`[pill-sampler] w=${w.toFixed(1)} hover=${hover} glass=${isGlass} mm=${mmCount} hit=${String(hitClass).slice(0, 40)}`);
+    }, 100);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('mousemove', onMM);
+    };
+  }, []);
+
   // Superwhisper-style collapse: tiny dark pill when truly idle. Any
   // activity (recording / processing / error / done flash) forces the
   // full UI. Hover-to-expand on top of the idle state is handled in CSS
@@ -152,7 +186,9 @@ export function CompactView() {
           tabIndex={isTrueIdle ? 0 : -1}
           title="Démarrer (Espace) · Double-clic = agrandir"
         >
-          <span className="pill-idle-dot" />
+          <span className="pill-idle-capsule">
+            <span className="pill-idle-dot" />
+          </span>
         </button>
 
         {/* Full face — expanded UI with mic button + body + expand. */}

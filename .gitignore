@@ -17,3 +17,7 @@ test-drag2.js
 test-movable.js
 test-hover.js
 test-hover-debug.js
+scripts/git-status.bat
+scripts/kill-electron.bat
+scripts/touchfile.bat
+scripts/move-workflow.bat

@@ -208,9 +208,16 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   left: 150%;
 }
 
-/* Titlebar drag regions */
+/* Titlebar drag regions.
+   -webkit-app-region is NOT inherited by default: every descendant of a
+   drag region must be re-declared drag, or it falls back to no-drag and
+   swallows pointer events. For the compact pill we therefore opt every
+   descendant of `.density-compact` back into drag (see that block
+   below), and use .no-drag here with `!important` so buttons (and the
+   icon <svg>s they contain) always win, whatever the cascade. */
 .drag { -webkit-app-region: drag; }
-.no-drag { -webkit-app-region: no-drag; }
+.no-drag,
+.no-drag * { -webkit-app-region: no-drag !important; }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -674,14 +681,41 @@ html[data-shimmer="1"] .glass-strong:hover::before {
    Window is 176x52, transparent, frameless. We render a glass pill
    centered inside and let the user drag from anywhere on it.
    ========================================================= */
+/* Every descendant of .density-compact is draggable (see note on .drag /
+   .no-drag about -webkit-app-region not being inherited). Buttons
+   (.pill-mic, .pill-expand, .pill-idle-face) carry .no-drag and override
+   this with `!important` so they can receive clicks. */
+.density-compact,
+.density-compact * { -webkit-app-region: drag; }
+
 .density-compact {
   width: 100%;
   height: 100%;
-  /* NOT draggable — the transparent gap around the pill must NOT catch
-     pointer events, otherwise the user sees a rectangular "phantom"
-     window around the tiny idle pill and can grab/drag it from there. */
-  cursor: default;
+  cursor: grab;
+  /* CRITICAL — HIT-TEST STABILITY.
+     The compact window is frameless + transparent + hasShadow:false.
+     On Windows, Chromium/DWM makes any pixel with alpha === 0
+     click-through (pointer events go straight to the desktop, not to
+     us). This is what caused the infamous "hover oscillation": when
+     the cursor entered the opaque idle pill, :hover fired and the
+     pill started expanding, but mid-animation the cursor could sit
+     briefly over a still-transparent pixel of .pill-root → :hover
+     became false → the pill shrank → the cursor was back over opaque
+     pixels → :hover returned true → infinite loop.
+
+     Setting a sub-perceptible alpha (0.001) on the whole window tells
+     DWM "every pixel is filled" without changing what the user sees,
+     so the hit-test is stable from the moment the cursor enters the
+     BrowserWindow until it leaves — exactly the semantics we want for
+     :hover and for drag. */
+  background: rgba(0, 0, 0, 0.01);
+  /* And because every pixel is now hit-testable, the whole window can
+     be the drag surface — the user can grab the pill from anywhere,
+     not only from the 52×20 dot. Buttons inside (.pill-mic,
+     .pill-expand, .pill-idle-face) opt back out via .no-drag. */
+  -webkit-app-region: drag;
 }
+.density-compact:active { cursor: grabbing; }
 
 .pill-root {
   width: 100%;
@@ -690,13 +724,16 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Hover zone only — React listens for mouseenter/leave here so the
-     pill can still expand even if the cursor is a few px away from the
-     idle dot. No drag here either (see `.density-compact` above). */
 }
 
 .pill {
-  /* Expanded default — overridden by .pill-root.is-idle below. */
+  /* CRITICAL: the pill box is ALWAYS this size, in every state. Any
+     width/height change during :hover would invalidate Chromium's
+     composited layer and cause the hover hit-test to briefly miss the
+     cursor, which produced the infamous collapse↔expand oscillation
+     (the :hover selector flipped mid-animation). By freezing the
+     layout and animating only paints (background/opacity/box-shadow),
+     hit-tests are perfectly stable. */
   width: 100%;
   height: 44px;
   padding: 3px 6px 3px 4px;
@@ -706,34 +743,19 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   box-shadow:
-    /* Halo: two tight rings that match the pill's capsule shape exactly
-       (same border-radius) and trace a subtle 5 px outline around the
-       visible pill. Makes the "phantom rectangle" become a phantom
-       capsule and visually hides any DWM-level window outline. */
     0 0 0 1px rgba(255, 255, 255, 0.04),
     0 0 0 4px rgba(255, 255, 255, 0.015),
-    /* Accent glow */
     0 0 0 5px rgba(var(--accent-1-rgb), calc(0.05 + 0.10 * var(--glow-intensity))),
-    /* Drop shadow */
     0 6px 22px -6px rgba(0, 0, 0, 0.55),
     0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  /* All animatable properties for the Superwhisper-style grow / shrink. */
   transition:
-    width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
     background 0.22s ease,
     border-color 0.22s ease,
-    box-shadow 0.22s ease;
+    box-shadow 0.22s ease,
+    backdrop-filter 0.22s ease,
+    -webkit-backdrop-filter 0.22s ease;
   position: relative;
-  /* Promote to its own compositor layer for smooth resizing. */
-  will-change: width, height;
-  /* The pill is THE draggable surface. Its shape (capsule via
-     border-radius: 999px) and size (idle: 52x20, expanded: full) define
-     exactly where the user can grab the window — no phantom rectangle
-     around it. */
-  -webkit-app-region: drag;
   cursor: grab;
 }
 .pill:active { cursor: grabbing; }
@@ -791,31 +813,52 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   -webkit-app-region: drag;
 }
 
-/* Collapsed state — tiny dark oval centred in the window (Superwhisper). */
-.pill-root.is-idle .pill {
+/* Small black Superwhisper-style capsule, drawn on .pill-idle-capsule
+   (a small child of .pill-idle-face, centred by its grid parent). We
+   use a real DOM element — NOT a pseudo-element — so it is a true
+   hit-test target in Electron's transparent window. The pseudo-element
+   approach would be invisible to Windows DWM hit-testing because ::before
+   doesn't get its own layer unless `pointer-events` is non-none, and
+   setting pointer-events:auto on ::before would steal clicks from the
+   button underneath. */
+.pill-idle-capsule {
   width: 52px;
   height: 20px;
-  padding: 0;
-  background: rgba(10, 10, 12, 0.88);
-  border-color: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(10, 10, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    /* Same capsule halo as expanded, slightly tighter since the pill
-       is small. Keeps the "rounded square" framing around the idle dot
-       the user asked for while staying extremely discreet. */
     0 0 0 1px rgba(255, 255, 255, 0.04),
     0 0 0 3px rgba(255, 255, 255, 0.015),
     0 3px 10px -2px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  /* Don't stack the aurora/glow when at rest — we want it very discreet. */
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+/* Collapsed (idle, not hovered): glass body transparent, small black
+   capsule visible. NO size/padding change — pure paint. */
+.pill-root.is-idle .pill {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: none !important;
 }
-/* Idle + hover: inherit the regular expanded pill look. All values here
-   revert the idle overrides above; the pill grows back to the default
-   100% × 44 px glass capsule. */
-.pill-root.is-idle:hover .pill {
-  width: 100%;
-  height: 44px;
-  padding: 3px 6px 3px 4px;
+.pill-root.is-idle .pill-idle-capsule {
+  opacity: 1;
+}
+/* Idle + hover: glass body re-appears, small capsule fades out.
+   Hover is queried from .density-compact (the only element whose
+   alpha-filled background guarantees a stable hit-test in Electron's
+   transparent window). .pill-root itself has no background → if we
+   targeted :hover on it, the answer would depend on whether Chromium
+   lets hit-test propagate from an alpha-0 child up to the parent,
+   which on Windows+DWM is flaky for stationary cursors. */
+.density-compact:hover .pill-root.is-idle .pill {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -825,6 +868,12 @@ html[data-shimmer="1"] .glass-strong:hover::before {
     0 6px 22px -6px rgba(0, 0, 0, 0.55),
     0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
+}
+.density-compact:hover .pill-root.is-idle .pill-idle-capsule {
+  opacity: 0;
+  transform: scale(0.85);
 }
 /* Idle (default) face visible. */
 .pill-root.is-idle .pill-full {
@@ -855,11 +904,11 @@ html[data-shimmer="1"] .glass-strong:hover::before {
    so we can't re-enter the hit-test / re-render loop that used to cause
    the hover oscillation. Chromium's :hover state updates at paint time
    only and is inherently stable. */
-.pill-root.is-idle:hover .pill-idle-face {
+.density-compact:hover .pill-root.is-idle .pill-idle-face {
   opacity: 0;
   z-index: 0;
 }
-.pill-root.is-idle:hover .pill-full {
+.density-compact:hover .pill-root.is-idle .pill-full {
   opacity: 1;
   z-index: 1;
 }

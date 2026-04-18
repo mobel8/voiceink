@@ -121,7 +121,15 @@ function buildWindow(density: Density): WindowCtx {
       maxWidth: WIDGET.w,
       maxHeight: WIDGET.h,
       transparent: true,
-      backgroundColor: '#00000000',
+      // The '#01000000' (alpha = 1/255) is invisible to the eye but
+      // non-zero to DWM — critical for Windows + transparent: true.
+      // With a fully-transparent backgroundColor, every pixel of the
+      // window ends up alpha=0 in the final compositor output, and
+      // DWM turns click-through. Any CSS alpha inside the page (even
+      // 0.2) is multiplied against that zero and still lands at 0.
+      // One alpha step is all we need to make the whole window
+      // hit-testable while staying visually identical.
+      backgroundColor: '#01000000',
       frame: false,
       resizable: false,
       maximizable: false,
