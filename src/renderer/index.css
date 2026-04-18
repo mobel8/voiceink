@@ -827,6 +827,7 @@ html[data-shimmer="1"] .glass-strong:hover::before {
    setting pointer-events:auto on ::before would steal clicks from the
    button underneath. */
 .pill-idle-capsule {
+  position: relative;
   width: 52px;
   height: 20px;
   border-radius: 999px;
@@ -841,6 +842,24 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   place-items: center;
   opacity: 0;
   transition: opacity 0.22s ease, transform 0.22s ease;
+}
+/* Forgiving hover halo around the visible capsule. Extends the :hover
+   hit-box from 52×20 to 80×32 without changing the paint, so the user
+   can approach the dot from a few pixels left/right/top/bottom and the
+   widget still opens. We stop short of x ≤ 46 (mic footprint) and
+   x ≥ 144 (expand footprint) so the "capsule-only entry" contract
+   still rejects hovers over where those invisible buttons would be.
+   The alpha-0.01 background is there for the same reason we use it on
+   .density-compact — it gives Chromium a paint layer so :hover is
+   guaranteed to fire on the pseudo even though it has no visible fill. */
+.pill-idle-capsule::before {
+  content: '';
+  position: absolute;
+  inset: -6px -14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.01);
+  pointer-events: auto;
+  -webkit-app-region: drag;
 }
 
 /* Collapsed (idle, not hovered-on-dot): glass body transparent, small

@@ -263,11 +263,11 @@ async function main() {
   const failures = [];
 
   // ---- Test A: retracted-only gate ------------------------------------
-  // In idle state, hovering any non-capsule pixel must leave the pill
-  // collapsed. This is the user's explicit complaint: the cursor over
-  // where the mic / expand buttons *would* be when expanded triggered
-  // the expansion from retracted mode.
-  console.log('\n── Test A: off-capsule pixels must NOT expand the pill');
+  // In idle state, hovering any pixel OUTSIDE the forgiving halo around
+  // the capsule must leave the pill collapsed. This is the user's core
+  // complaint: moving the cursor over the mic/expand button positions
+  // (invisible in retracted mode) used to trigger expansion.
+  console.log('\n── Test A: off-halo pixels must NOT expand the pill');
   const nonCapsulePoints = [
     { label: 'top-left-corner',    x: 4,        y: 4 },
     { label: 'top-right-corner',   x: w - 4,    y: 4 },
@@ -289,7 +289,7 @@ async function main() {
     }
   }
 
-  // ---- Test B: capsule DOES expand ------------------------------------
+  // ---- Test B: capsule centre expands ---------------------------------
   console.log('\n── Test B: hovering the black dot expands the pill');
   await park();
   const bCentre = await probe(w / 2, h / 2);
@@ -297,6 +297,25 @@ async function main() {
     const ok = bCentre.expanded && bCentre.fullOp > 0.9 && bCentre.capOp < 0.1;
     console.log(`  ${ok ? 'OK' : 'NO'}  capsule-centre (${Math.round(w/2)},${Math.round(h/2)})  fullOp=${bCentre.fullOp.toFixed(2)} capOp=${bCentre.capOp.toFixed(2)} width=${Math.round(bCentre.width)}`);
     if (!ok) failures.push(`B: capsule hover did not expand (fullOp=${bCentre.fullOp}, capOp=${bCentre.capOp})`);
+  }
+
+  // ---- Test B2: forgiving halo around the dot -------------------------
+  // The ::before halo extends the hit-box from 52×20 to 80×32, centred
+  // on the dot. Pixels JUST inside that halo — a few px off the visible
+  // capsule in every direction — must ALSO expand the pill.
+  console.log('\n── Test B2: forgiving halo a few px around the dot also expands');
+  const haloPoints = [
+    { label: 'halo-left',   x: Math.round(w / 2) - 36, y: h / 2 },
+    { label: 'halo-right',  x: Math.round(w / 2) + 36, y: h / 2 },
+    { label: 'halo-top',    x: w / 2,                  y: Math.round(h / 2) - 13 },
+    { label: 'halo-bottom', x: w / 2,                  y: Math.round(h / 2) + 13 },
+  ];
+  for (const pt of haloPoints) {
+    await park();
+    const s = await probe(pt.x, pt.y);
+    const ok = s.expanded;
+    console.log(`  ${ok ? 'OK' : 'NO'}  ${pt.label.padEnd(14)} (${Math.round(pt.x)},${Math.round(pt.y)})  fullOp=${s.fullOp.toFixed(2)} capOp=${s.capOp.toFixed(2)}`);
+    if (!ok) failures.push(`B2: ${pt.label} did not expand (fullOp=${s.fullOp})`);
   }
 
   // ---- Test C: retention after entry ----------------------------------
