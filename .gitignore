@@ -31,9 +31,11 @@ scripts/commit.bat
 scripts/do-commit.bat
 scripts/do-push.bat
 scripts/do-commit2.bat
+scripts/do-commit3.bat
 scripts/show-electron.bat
 scripts/show-electron-appdata.bat
 scripts/_msg2.txt
+scripts/_msg3.txt
 scripts/push.bat
 scripts/echeck.bat
 scripts/launch-pill.bat

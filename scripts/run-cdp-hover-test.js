@@ -6,12 +6,20 @@
  * and dispatch Input.dispatchMouseEvent — the ONLY reliable way to move
  * the mouse inside a transparent alwaysOnTop window on Windows.
  *
- * Success criteria
- *   1. The whole 176×52 window area triggers `.density-compact:hover`
- *      when the cursor is parked on ANY pixel inside it.
- *   2. Once hover is active, the pill width stays == 164 for 3 seconds
- *      (no oscillation).
- *   3. The console emits no unexpected errors during the test.
+ * Success criteria (current UX)
+ *   1. Retracted-only gate: hovering any pixel OUTSIDE the small black
+ *      capsule — including the mic and expand button positions that
+ *      are invisible in idle state — must leave the pill collapsed.
+ *      The capsule dot is the single entry point.
+ *   2. Expansion: hovering the capsule expands the pill (glass body
+ *      appears, pill-full reaches opacity 1).
+ *   3. Retention: once expanded, moving the cursor to the mic or the
+ *      expand button positions keeps the pill expanded (hovering the
+ *      pill body counts as "keep open" via :has(.pill-full:hover)).
+ *   4. Collapse: moving the cursor out of the pill collapses it.
+ *   5. Stability: parked on the capsule, no hover/size oscillation
+ *      over 3 seconds.
+ *   6. The console emits no unexpected errors during the test.
  */
 const { spawn, execSync } = require('child_process');
 const path = require('path');
@@ -211,32 +219,36 @@ async function main() {
   if (!mounted) console.warn('▶ warning: .pill not mounted after 8 s, probing anyway');
   await sleep(250);
 
-  // Helper: park the mouse at viewport-relative (x, y), then query the
-  // actual :hover state + computed background of the pill.
+  // Helper: move the mouse to (x, y) and return a full snapshot of the
+  // observable state. `expanded` is the single ground-truth flag we use
+  // to grade each test: it inspects the *real* pill visual rather than
+  // one CSS side-effect, so it stays valid whatever trigger selector
+  // the renderer is using under the hood.
   async function probe(x, y) {
     await cdp.send('Input.dispatchMouseEvent', {
-      type: 'mouseMoved',
-      x, y,
-      button: 'none',
-      buttons: 0,
-      modifiers: 0,
+      type: 'mouseMoved', x, y, button: 'none', buttons: 0, modifiers: 0,
     });
-    // Allow Chromium one frame to re-evaluate :hover.
-    await sleep(80);
+    // One Chromium paint for :hover/:has to settle, plus the 180 ms
+    // opacity transition so we read the settled value.
+    await sleep(260);
     const r = await cdp.send('Runtime.evaluate', {
       expression: `(() => {
-        const c = document.querySelector('.density-compact');
-        const p = document.querySelector('.pill');
-        const pr = document.querySelector('.pill-root');
-        const bg = p ? getComputedStyle(p).backgroundImage : '';
-        const el = document.elementFromPoint(${x}, ${y});
+        const pr   = document.querySelector('.pill-root');
+        const p    = document.querySelector('.pill');
+        const full = document.querySelector('.pill-full');
+        const cap  = document.querySelector('.pill-idle-capsule');
+        const bg   = p ? getComputedStyle(p).backgroundImage : '';
+        const fullOp = full ? parseFloat(getComputedStyle(full).opacity) : 0;
+        const capOp  = cap  ? parseFloat(getComputedStyle(cap).opacity)  : 1;
+        const el   = document.elementFromPoint(${x}, ${y});
         return JSON.stringify({
-          hover: !!c?.matches(':hover'),
-          glass: bg.includes('linear-gradient'),
-          width: p?.getBoundingClientRect().width || 0,
-          pillRootClass: pr?.className || '(none)',
-          cRect: c?.getBoundingClientRect(),
-          prRect: pr?.getBoundingClientRect(),
+          expanded:  bg.includes('linear-gradient') && fullOp > 0.5,
+          collapsed: !bg.includes('linear-gradient') && fullOp < 0.5,
+          width:     p?.getBoundingClientRect().width || 0,
+          fullOp, capOp,
+          hasCapsuleHover: !!pr?.matches(':has(.pill-idle-capsule:hover)'),
+          hasFullHover:    !!pr?.matches(':has(.pill-full:hover)'),
+          pillRootClass:   pr?.className || '(none)',
           hit: (el?.className || el?.tagName || 'null').toString().slice(0, 40),
         });
       })()`,
@@ -244,35 +256,82 @@ async function main() {
     return JSON.parse(r.result.value);
   }
 
-  // ---- Test 1: hover triggers ANYWHERE in the window ------------------
-  console.log('\n── Test 1: hover should activate on every pixel of the window');
-  const points = [
-    { label: 'centre',       x: w / 2,     y: h / 2 },
-    { label: 'top-left',     x: 4,         y: 4 },
-    { label: 'top-right',    x: w - 4,     y: 4 },
-    { label: 'bottom-left',  x: 4,         y: h - 4 },
-    { label: 'bottom-right', x: w - 4,     y: h - 4 },
-    { label: 'far-left',     x: 10,        y: h / 2 },
-    { label: 'far-right',    x: w - 10,    y: h / 2 },
+  // Park cursor WAY outside the 176×55 pill window to reset any hover
+  // state between sub-tests.
+  const park = () => probe(w + 500, h + 500);
+
+  const failures = [];
+
+  // ---- Test A: retracted-only gate ------------------------------------
+  // In idle state, hovering any non-capsule pixel must leave the pill
+  // collapsed. This is the user's explicit complaint: the cursor over
+  // where the mic / expand buttons *would* be when expanded triggered
+  // the expansion from retracted mode.
+  console.log('\n── Test A: off-capsule pixels must NOT expand the pill');
+  const nonCapsulePoints = [
+    { label: 'top-left-corner',    x: 4,        y: 4 },
+    { label: 'top-right-corner',   x: w - 4,    y: 4 },
+    { label: 'bottom-left-corner', x: 4,        y: h - 4 },
+    { label: 'bottom-right-corner',x: w - 4,    y: h - 4 },
+    { label: 'mic-area-L',         x: 20,       y: h / 2 },
+    { label: 'mic-area-R',         x: 36,       y: h / 2 },
+    { label: 'expand-area-L',      x: w - 36,   y: h / 2 },
+    { label: 'expand-area-R',      x: w - 20,   y: h / 2 },
   ];
-  const results = [];
-  for (const p of points) {
-    const s = await probe(p.x, p.y);
-    results.push({ ...p, ...s });
-    const ok = s.hover && s.glass;
-    console.log(`  ${ok ? 'OK' : 'NO'}  ${p.label.padEnd(14)} (${Math.round(p.x)}, ${Math.round(p.y)})  hover=${s.hover} glass=${s.glass} w=${Math.round(s.width)}`);
+  for (const pt of nonCapsulePoints) {
+    await park();
+    const s = await probe(pt.x, pt.y);
+    const ok = s.collapsed;
+    console.log(`  ${ok ? 'OK' : 'NO'}  ${pt.label.padEnd(20)} (${Math.round(pt.x)},${Math.round(pt.y)})  fullOp=${s.fullOp.toFixed(2)} capOp=${s.capOp.toFixed(2)}`);
     if (!ok) {
-      console.log('     diag:', JSON.stringify({
-        pillRootClass: s.pillRootClass,
-        cRect: s.cRect,
-        prRect: s.prRect,
-        hit: s.hit,
-      }));
+      failures.push(`A: ${pt.label} wrongly expanded (fullOp=${s.fullOp})`);
+      console.log('     diag:', JSON.stringify({ hit: s.hit, cap: s.hasCapsuleHover, full: s.hasFullHover }));
     }
   }
 
-  // ---- Test 2: stability on stationary cursor --------------------------
-  console.log('\n── Test 2: hover stable for 3 s at centre');
+  // ---- Test B: capsule DOES expand ------------------------------------
+  console.log('\n── Test B: hovering the black dot expands the pill');
+  await park();
+  const bCentre = await probe(w / 2, h / 2);
+  {
+    const ok = bCentre.expanded && bCentre.fullOp > 0.9 && bCentre.capOp < 0.1;
+    console.log(`  ${ok ? 'OK' : 'NO'}  capsule-centre (${Math.round(w/2)},${Math.round(h/2)})  fullOp=${bCentre.fullOp.toFixed(2)} capOp=${bCentre.capOp.toFixed(2)} width=${Math.round(bCentre.width)}`);
+    if (!ok) failures.push(`B: capsule hover did not expand (fullOp=${bCentre.fullOp}, capOp=${bCentre.capOp})`);
+  }
+
+  // ---- Test C: retention after entry ----------------------------------
+  // Enter via the capsule, then slide to the mic / expand / body. The
+  // expansion must remain because :has(.pill-full:hover) latches.
+  console.log('\n── Test C: once expanded, sliding to mic/expand retains state');
+  const retentionPoints = [
+    { label: 'mic-area',    x: 22,     y: h / 2 },
+    { label: 'body-left',   x: 60,     y: h / 2 },
+    { label: 'body-right',  x: w - 60, y: h / 2 },
+    { label: 'expand-area', x: w - 22, y: h / 2 },
+  ];
+  for (const pt of retentionPoints) {
+    await park();
+    await probe(w / 2, h / 2);          // enter via capsule → expand
+    const s = await probe(pt.x, pt.y);  // slide to target, should stay expanded
+    const ok = s.expanded;
+    console.log(`  ${ok ? 'OK' : 'NO'}  slide-to-${pt.label.padEnd(14)} (${Math.round(pt.x)},${Math.round(pt.y)})  fullOp=${s.fullOp.toFixed(2)} hasFullHover=${s.hasFullHover}`);
+    if (!ok) failures.push(`C: slide to ${pt.label} collapsed (fullOp=${s.fullOp})`);
+  }
+
+  // ---- Test D: leaving the pill collapses -----------------------------
+  console.log('\n── Test D: leaving the pill area collapses back to retracted');
+  await park();
+  await probe(w / 2, h / 2);                           // expand
+  const dAfter = await probe(w + 500, h + 500);         // leave entirely
+  {
+    const ok = dAfter.collapsed;
+    console.log(`  ${ok ? 'OK' : 'NO'}  cursor-outside  fullOp=${dAfter.fullOp.toFixed(2)} capOp=${dAfter.capOp.toFixed(2)}`);
+    if (!ok) failures.push(`D: pill did not collapse after cursor left (fullOp=${dAfter.fullOp})`);
+  }
+
+  // ---- Test E: 3-second stability on the capsule ----------------------
+  console.log('\n── Test E: hover stable for 3 s at capsule centre');
+  await park();
   await cdp.send('Input.dispatchMouseEvent', {
     type: 'mouseMoved', x: w / 2, y: h / 2, button: 'none', buttons: 0,
   });
@@ -281,13 +340,13 @@ async function main() {
   for (let i = 0; i < 30; i++) {
     const r = await cdp.send('Runtime.evaluate', {
       expression: `(() => {
-        const c = document.querySelector('.density-compact');
-        const p = document.querySelector('.pill');
-        const bg = p ? getComputedStyle(p).backgroundImage : '';
+        const p    = document.querySelector('.pill');
+        const full = document.querySelector('.pill-full');
+        const bg   = p ? getComputedStyle(p).backgroundImage : '';
         return JSON.stringify({
-          hover: !!c?.matches(':hover'),
-          glass: bg.includes('linear-gradient'),
+          expanded: bg.includes('linear-gradient') && parseFloat(getComputedStyle(full).opacity) > 0.5,
           w: p?.getBoundingClientRect().width || 0,
+          fullOp: full ? parseFloat(getComputedStyle(full).opacity) : 0,
         });
       })()`,
     });
@@ -295,30 +354,23 @@ async function main() {
     await sleep(100);
   }
   const ws = stability.map((s) => Math.round(s.w));
-  const allHover = stability.every((s) => s.hover);
-  const allGlass = stability.every((s) => s.glass);
-  const widthSpread = Math.max(...ws) - Math.min(...ws);
-  console.log('  widths :', ws.join(','));
-  console.log('  hovers :', stability.map((s) => s.hover ? 1 : 0).join(''));
-  console.log('  glasses:', stability.map((s) => s.glass ? 1 : 0).join(''));
-  console.log(`  allHover=${allHover} allGlass=${allGlass} widthSpread=${widthSpread}`);
-
-  // ---- Verdict ---------------------------------------------------------
-  const anyMiss = results.some((r) => !r.hover || !r.glass);
-  const verdict = !anyMiss && allHover && allGlass && widthSpread < 4;
+  const allExp = stability.every((s) => s.expanded);
+  const spread = Math.max(...ws) - Math.min(...ws);
+  console.log('  widths   :', ws.join(','));
+  console.log('  expanded :', stability.map((s) => s.expanded ? 1 : 0).join(''));
+  console.log(`  allExpanded=${allExp} widthSpread=${spread}`);
+  if (!allExp) failures.push('E: expansion dropped during stationary 3 s');
+  if (spread >= 4) failures.push(`E: pill width oscillated by ${spread} px`);
 
   cdp.close();
   killElectron();
 
-  if (verdict) {
-    console.log('\n✅ PASS: whole-window hover + stable expansion.');
+  if (failures.length === 0) {
+    console.log('\n✅ PASS: capsule-only entry + retention + collapse + stability.');
     process.exit(0);
   }
   console.log('\n❌ FAIL');
-  if (anyMiss) console.log('  - some points did not trigger hover / glass');
-  if (!allHover) console.log('  - hover dropped during stationary 3 s');
-  if (!allGlass) console.log('  - glass background dropped during stationary 3 s');
-  if (widthSpread >= 4) console.log('  - pill width oscillated by', widthSpread, 'px');
+  for (const f of failures) console.log('  - ' + f);
   process.exit(1);
 }
 
