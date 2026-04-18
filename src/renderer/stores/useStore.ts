@@ -66,11 +66,23 @@ export const useStore = create<State>()((set, get) => ({
   settings: INITIAL_SETTINGS,
   loadSettings: async () => {
     const s = await window.voiceink.getSettings();
-    set({ settings: s });
+    // Preserve the URL-hash-derived density — it is the single source
+    // of truth for which window this renderer is running in. If we let
+    // a persisted 'comfortable' / 'compact' leak in here, React will
+    // re-render the wrong component tree inside a window that was
+    // sized for the other density (invisible MainView crammed into a
+    // 176×55 pill, or the opposite), and every subsequent hover /
+    // click lands on the wrong element. Density changes go through
+    // swapDensity() in main, which recreates the window and reloads
+    // the renderer with a fresh hash, so this never needs to update
+    // in-flight.
+    set({ settings: { ...s, density: initialDensity() } });
   },
   updateSettings: async (patch) => {
     const next = await window.voiceink.setSettings(patch);
-    set({ settings: next });
+    // Same contract as loadSettings — never let density flip under
+    // a live renderer.
+    set({ settings: { ...next, density: initialDensity() } });
   },
 
   history: [],
