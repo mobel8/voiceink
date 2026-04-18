@@ -12,6 +12,14 @@ import {
 } from './services/focus';
 import { getSettings, setSettings } from './services/config';
 
+// Force the app name BEFORE any userData-dependent API runs. Without this,
+// running the dev binary (node_modules/.bin/electron) uses the generic
+// 'Electron' name → userData lands in %APPDATA%\Electron\ and creates a
+// parallel settings file, orphaned from what the packaged .exe reads.
+// Must stay the first executable statement of this module.
+app.setName('voiceink');
+app.setPath('userData', join(app.getPath('appData'), 'voiceink'));
+
 /**
  * Wraps an Electron BrowserWindow with the density it was built for and
  * per-instance state we want to clean up deterministically (e.g. the pill

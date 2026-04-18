@@ -137,8 +137,19 @@ async function findPillTarget() {
   for (let i = 0; i < 60; i++) {
     try {
       const list = await httpJson(`http://127.0.0.1:${CDP_PORT}/json`);
+      // Log every page target we see during discovery so we can spot
+      // orphans / duplicates across density swaps.
+      if (i < 2 || i % 10 === 0) {
+        for (const t of list) {
+          if (t.type === 'page') {
+            console.log(`    [cdp-target] ${t.id.slice(0,6)} ${t.url}`);
+          }
+        }
+      }
+      // Strict match: the URL must END with "#compact", not merely contain
+      // the word — defends against odd bootstrap URLs and query strings.
       const t = list.find((x) =>
-        x.type === 'page' && /compact/.test(x.url || '')
+        x.type === 'page' && /#compact(-[a-z]+)?$/.test(x.url || '')
       );
       if (t) return t;
     } catch {}
@@ -187,15 +198,17 @@ async function main() {
   console.log('▶ viewport:', w + '×' + h);
 
   // Wait for the pill DOM to fully mount and lay out before probing.
-  // Otherwise the first 1-2 probes can race the React commit and see
+  // Otherwise the first probes can race the React commit and see
   // width=0 / no hover even though everything is fine.
-  for (let i = 0; i < 60; i++) {
+  let mounted = false;
+  for (let i = 0; i < 80; i++) {
     const r = await cdp.send('Runtime.evaluate', {
       expression: `!!document.querySelector('.pill') && document.querySelector('.pill').getBoundingClientRect().width > 0`,
     });
-    if (r.result.value) break;
+    if (r.result.value) { mounted = true; break; }
     await sleep(100);
   }
+  if (!mounted) console.warn('▶ warning: .pill not mounted after 8 s, probing anyway');
   await sleep(250);
 
   // Helper: park the mouse at viewport-relative (x, y), then query the
@@ -214,12 +227,16 @@ async function main() {
       expression: `(() => {
         const c = document.querySelector('.density-compact');
         const p = document.querySelector('.pill');
+        const pr = document.querySelector('.pill-root');
         const bg = p ? getComputedStyle(p).backgroundImage : '';
         const el = document.elementFromPoint(${x}, ${y});
         return JSON.stringify({
           hover: !!c?.matches(':hover'),
           glass: bg.includes('linear-gradient'),
           width: p?.getBoundingClientRect().width || 0,
+          pillRootClass: pr?.className || '(none)',
+          cRect: c?.getBoundingClientRect(),
+          prRect: pr?.getBoundingClientRect(),
           hit: (el?.className || el?.tagName || 'null').toString().slice(0, 40),
         });
       })()`,
@@ -244,6 +261,14 @@ async function main() {
     results.push({ ...p, ...s });
     const ok = s.hover && s.glass;
     console.log(`  ${ok ? 'OK' : 'NO'}  ${p.label.padEnd(14)} (${Math.round(p.x)}, ${Math.round(p.y)})  hover=${s.hover} glass=${s.glass} w=${Math.round(s.width)}`);
+    if (!ok) {
+      console.log('     diag:', JSON.stringify({
+        pillRootClass: s.pillRootClass,
+        cRect: s.cRect,
+        prRect: s.prRect,
+        hit: s.hit,
+      }));
+    }
   }
 
   // ---- Test 2: stability on stationary cursor --------------------------

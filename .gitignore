@@ -29,6 +29,11 @@ scripts/env-dump.bat
 scripts/commit-msg.txt
 scripts/commit.bat
 scripts/do-commit.bat
+scripts/do-push.bat
+scripts/do-commit2.bat
+scripts/show-electron.bat
+scripts/show-electron-appdata.bat
+scripts/_msg2.txt
 scripts/push.bat
 scripts/echeck.bat
 scripts/launch-pill.bat
