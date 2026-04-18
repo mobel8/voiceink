@@ -1,369 +1,184 @@
-import { IpcMain, BrowserWindow, dialog, app, screen } from 'electron';
-import * as path from 'path';
-import * as fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
-import { IPC, HistoryEntry, RecordingState, PipelineStatus } from '../shared/types';
-import { ConfigService } from './services/config';
-import { HistoryService } from './services/history';
-import { WhisperEngine } from './engines/whisper';
-import { LLMEngine } from './engines/llm';
-import { TextInjector } from './services/injection';
-import { ExportService } from './services/export';
+import { ipcMain, clipboard, app, dialog, BrowserWindow } from 'electron';
+import { randomUUID } from 'crypto';
+import { writeFile } from 'fs/promises';
+import { IPC, TranscribeResponse, Settings } from '../shared/types';
+import { getSettings, setSettings } from './services/config';
+import { transcribeWithGroq } from './engines/whisper';
+import { postProcess, translateText } from './engines/llm';
+import {
+  listHistory,
+  addHistory,
+  deleteHistory,
+  clearHistory,
+  togglePinHistory,
+  getUsageStats,
+  exportHistory,
+} from './services/history';
+import { injectText, copyToClipboard } from './services/injection';
+import { applyReplacements, wordCount } from './services/replacements';
+import {
+  sanitizeSettingsPatch,
+  validateHistoryId,
+  validateExportFormat,
+  validateTranscribeRequest,
+  validateText,
+} from './services/validate';
 
-let currentRecordingState: RecordingState = 'idle';
-let audioTempPath: string | null = null;
+export function registerIpc(): void {
+  ipcMain.handle(IPC.GET_SETTINGS, (): Settings => getSettings());
+  ipcMain.handle(IPC.SET_SETTINGS, (_e, patch: unknown) => setSettings(sanitizeSettingsPatch(patch)));
 
-export function registerIpcHandlers(
-  ipcMain: IpcMain,
-  mainWindow: BrowserWindow,
-  configService: ConfigService,
-  historyService: HistoryService,
-  whisperEngine: WhisperEngine,
-  llmEngine: LLMEngine,
-  textInjector: TextInjector,
-  exportService: ExportService
-): void {
-
-  // ===== Settings =====
-  ipcMain.handle(IPC.SETTINGS_GET, () => {
-    return configService.getSettings();
+  ipcMain.handle(IPC.GET_HISTORY, () => listHistory());
+  ipcMain.handle(IPC.ADD_HISTORY, (_e, entry) => addHistory(entry));
+  ipcMain.handle(IPC.DELETE_HISTORY, (_e, id: unknown) => {
+    const safe = validateHistoryId(id);
+    if (!safe) return;
+    return deleteHistory(safe);
   });
-
-  ipcMain.handle(IPC.SETTINGS_SET, (_event, settings) => {
-    return configService.updateSettings(settings);
+  ipcMain.handle(IPC.CLEAR_HISTORY, () => clearHistory());
+  ipcMain.handle(IPC.TOGGLE_PIN_HISTORY, (_e, id: unknown) => {
+    const safe = validateHistoryId(id);
+    if (!safe) return false;
+    return togglePinHistory(safe);
   });
+  ipcMain.handle(IPC.GET_USAGE_STATS, () => getUsageStats());
 
-  ipcMain.handle(IPC.SETTINGS_RESET, () => {
-    return configService.resetSettings();
-  });
-
-  // ===== Audio =====
-  ipcMain.handle(IPC.AUDIO_START, async () => {
-    currentRecordingState = 'recording';
-    mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'recording');
-    sendPipelineStatus(mainWindow, { state: 'recording', message: 'Enregistrement en cours...' });
-    return true;
-  });
-
-  ipcMain.handle(IPC.AUDIO_STOP, async () => {
-    currentRecordingState = 'processing';
-    mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'processing');
-    sendPipelineStatus(mainWindow, { state: 'processing', message: 'Traitement en cours...' });
-    return true;
-  });
-
-  // ===== STT Transcription (decoupled from LLM) =====
-  ipcMain.handle(IPC.STT_TRANSCRIBE, async (_event, audioData: string, language?: string) => {
-    const t0 = Date.now();
-    try {
-      sendPipelineStatus(mainWindow, { state: 'processing', message: 'Transcription...' });
-
-      // Decode base64 to buffer — fast in-memory operation
-      let audioBuffer: Buffer;
-      if (audioData.startsWith('data:')) {
-        const commaIdx = audioData.indexOf(',');
-        audioBuffer = Buffer.from(audioData.substring(commaIdx + 1), 'base64');
-      } else {
-        audioBuffer = await fs.promises.readFile(audioData);
-      }
-      const tDecode = Date.now();
-      console.log(`[Pipeline] Decode: ${audioBuffer.length} bytes in ${tDecode - t0}ms`);
-
-      const settings = configService.getSettings();
-      const isCloudProvider = ['groq', 'openai', 'glm'].includes(settings.stt.provider);
-
-      let transcription;
-      if (isCloudProvider) {
-        // Cloud providers: send buffer directly — skip temp file entirely
-        transcription = await whisperEngine.transcribeFromBuffer(audioBuffer, language);
-      } else {
-        // Local whisper: needs a file path
-        const tempDir = app.getPath('temp');
-        audioTempPath = path.join(tempDir, `voiceink-${Date.now()}.wav`);
-        await fs.promises.writeFile(audioTempPath, audioBuffer);
-        transcription = await whisperEngine.transcribe(audioTempPath, language);
-        fs.promises.unlink(audioTempPath).catch(() => {});
-      }
-
-      const elapsed = Date.now() - t0;
-      console.log(`[Pipeline] Total transcription: ${elapsed}ms — "${(transcription.text || '').substring(0, 80)}"`);
-      mainWindow.webContents.send(IPC.STT_RESULT, transcription);
-
-      sendPipelineStatus(mainWindow, {
-        state: 'idle',
-        message: transcription.text?.trim() ? `Transcrit en ${(elapsed / 1000).toFixed(1)}s` : 'Aucun texte detecte',
-      });
-
-      currentRecordingState = 'idle';
-      mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'idle');
-      return transcription;
-    } catch (error: any) {
-      console.error('Pipeline error:', error);
-      sendPipelineStatus(mainWindow, { state: 'idle', message: `Erreur: ${error.message}` });
-      currentRecordingState = 'idle';
-      mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'idle');
-      throw error;
-    }
-  });
-
-  // ===== File Transcription =====
-  ipcMain.handle(IPC.FILE_OPEN, async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openFile'],
+  ipcMain.handle(IPC.EXPORT_HISTORY, async (event, rawFormat: unknown) => {
+    const format = validateExportFormat(rawFormat);
+    if (!format) return { ok: false, error: 'invalid format' };
+    const { filename, content } = exportHistory(format);
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+    const res = await dialog.showSaveDialog(win!, {
+      title: 'Exporter l\'historique',
+      defaultPath: filename,
       filters: [
-        { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'mp4', 'ogg', 'webm', 'flac'] },
+        format === 'json'     ? { name: 'JSON',     extensions: ['json'] } :
+        format === 'markdown' ? { name: 'Markdown', extensions: ['md'] } :
+        format === 'csv'      ? { name: 'CSV',      extensions: ['csv'] } :
+                                { name: 'Texte',    extensions: ['txt'] },
       ],
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
-  });
-
-  ipcMain.handle(IPC.FILE_TRANSCRIBE, async (_event, filePath: string) => {
+    if (res.canceled || !res.filePath) return { ok: false, canceled: true };
     try {
-      sendPipelineStatus(mainWindow, { state: 'processing', message: 'Transcription du fichier...' });
-
-      const transcription = await whisperEngine.transcribe(filePath);
-
-      // LLM post-processing
-      const processed = await llmEngine.process(transcription.text);
-
-      // Save to history
-      const historyEntry: HistoryEntry = {
-        id: uuidv4(),
-        timestamp: Date.now(),
-        originalText: transcription.text,
-        processedText: processed.processed,
-        mode: processed.mode,
-        language: transcription.language,
-        duration: transcription.duration,
-        tags: [],
-        source: 'file',
-        fileName: path.basename(filePath),
-      };
-      historyService.add(historyEntry);
-
-      sendPipelineStatus(mainWindow, { state: 'idle', message: 'Fichier transcrit ✓' });
-      return { transcription, processed, historyId: historyEntry.id };
-    } catch (error: any) {
-      sendPipelineStatus(mainWindow, { state: 'idle', message: `Erreur: ${error.message}` });
-      throw error;
+      await writeFile(res.filePath, content, 'utf-8');
+      return { ok: true, path: res.filePath };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
     }
   });
 
-  // ===== LLM (streaming) =====
-  ipcMain.handle(IPC.LLM_PROCESS, async (_event, text: string, mode?: string, targetLang?: string) => {
+  ipcMain.handle(IPC.SET_AUTO_START, (_e, enabled: unknown) => {
+    const flag = !!enabled; // explicit boolean coerce
     try {
-      const settings = configService.getSettings();
-      const activeMode = (mode || settings.llm.mode) as any;
+      app.setLoginItemSettings({
+        openAtLogin: flag,
+        // --hidden is read by main/index.ts to decide whether to hide the window on startup.
+        args: flag ? ['--hidden'] : [],
+      });
+      setSettings({ autoStart: flag });
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || String(err) };
+    }
+  });
 
-      // Raw mode with no translation — no LLM needed
-      if ((activeMode === 'raw' && !targetLang) || settings.llm.provider === 'none') {
-        return { original: text, processed: text, mode: activeMode };
+  ipcMain.handle(IPC.COPY_TEXT, (_e, text: unknown) => {
+    const safe = validateText(text);
+    if (safe === null) return;
+    copyToClipboard(safe);
+  });
+  ipcMain.handle(IPC.INJECT_TEXT, (_e, text: unknown) => {
+    const safe = validateText(text);
+    if (safe === null) return;
+    return injectText(safe);
+  });
+
+  ipcMain.handle(IPC.TRANSCRIBE, async (_e, rawReq: unknown): Promise<TranscribeResponse> => {
+    const req = validateTranscribeRequest(rawReq);
+    if (!req) {
+      return { ok: false, rawText: '', finalText: '', durationMs: 0, error: 'invalid request' };
+    }
+    const t0 = Date.now();
+    try {
+      const settings = getSettings();
+      const buf = Buffer.from(req.audioBase64, 'base64');
+      console.log(`[transcribe] received audio: ${buf.length} bytes (${req.mimeType})`);
+      if (buf.length < 500) {
+        throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
       }
 
-      let systemPrompt: string;
-      if (targetLang) {
-        const langNames: Record<string, string> = { fr: 'francais', en: 'anglais', es: 'espagnol', de: 'allemand', it: 'italien', pt: 'portugais', zh: 'chinois', ja: 'japonais', ko: 'coreen', ar: 'arabe', ru: 'russe', nl: 'neerlandais', pl: 'polonais' };
-        const targetName = langNames[targetLang] || targetLang;
-        if (activeMode === 'raw' || activeMode === 'custom') {
-          systemPrompt = `Traduis fidelement le texte suivant en ${targetName}. Reponds UNIQUEMENT avec la traduction, sans explication.`;
-        } else {
-          const modePrompt = llmEngine.getSystemPrompt(activeMode, settings.llm.customPrompt || undefined);
-          systemPrompt = `${modePrompt}\n\nIMPORTANT: Le texte final doit etre en ${targetName}. Traduis et reformule en ${targetName}.`;
+      const t1 = Date.now();
+      const r = await transcribeWithGroq(buf, req.mimeType, settings);
+      const t2 = Date.now();
+      console.log(`[transcribe] groq whisper: ${t2 - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'})`);
+
+      // Custom dictionary (replacements) — applied to the RAW Whisper output
+      // before anything else so translation / LLM see the corrected text.
+      let rawText = r.text;
+      if (settings.replacementsEnabled !== false && settings.replacements?.length) {
+        const rs = Date.now();
+        rawText = applyReplacements(rawText, settings.replacements);
+        if (rawText !== r.text) {
+          console.log(`[transcribe] applied ${settings.replacements.length} replacement rule(s) in ${Date.now() - rs}ms`);
         }
-      } else {
-        systemPrompt = llmEngine.getSystemPrompt(activeMode, settings.llm.customPrompt || undefined);
       }
 
-      // Stream tokens to renderer
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text },
-      ];
+      // Automatic translation if target language requested (explicit in request
+      // takes precedence over stored setting).
+      const translateTo = (req.translateTo !== undefined ? req.translateTo : settings.translateTo) || '';
+      let translated: string | null = null;
+      if (translateTo && rawText.trim()) {
+        const ts = Date.now();
+        translated = await translateText(rawText, translateTo, settings, r.language);
+        console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms`);
+      }
 
-      mainWindow.webContents.send(IPC.LLM_STREAM, '\x00START');  // signal start
-      const processed = await llmEngine.chatStream(messages, (token: string) => {
-        mainWindow.webContents.send(IPC.LLM_STREAM, token);
-      });
-      mainWindow.webContents.send(IPC.LLM_STREAM, '\x00END');  // signal end
+      // LLM post-processing operates on whichever text we'll present
+      // (translated if any, else raw) so the reformulation is in the target language.
+      let final = translated ?? rawText;
+      if (settings.llmEnabled && req.mode !== 'raw') {
+        const ps = Date.now();
+        final = await postProcess(final, req.mode, settings);
+        console.log(`[transcribe] llm post-process: ${Date.now() - ps}ms`);
+      }
 
-      const result = { original: text, processed, mode: activeMode };
-      mainWindow.webContents.send(IPC.LLM_RESULT, result);
+      const durationMs = Date.now() - t0;
 
-      // Save to history
-      const historyEntry: HistoryEntry = {
-        id: uuidv4(),
-        timestamp: Date.now(),
-        originalText: text,
-        processedText: processed,
-        mode: activeMode,
-        language: '',
-        duration: 0,
+      addHistory({
+        id: randomUUID(),
+        createdAt: Date.now(),
+        rawText,
+        finalText: final,
+        mode: req.mode,
+        language: r.language || req.language || 'auto',
+        translatedTo: translateTo || undefined,
+        durationMs,
+        audioMs: 0,
         tags: [],
-        source: 'dictation',
-      };
-      historyService.add(historyEntry);
-
-      return result;
-    } catch (error: any) {
-      mainWindow.webContents.send(IPC.LLM_STREAM, '\x00END');
-      throw error;
-    }
-  });
-
-  // ===== Injection =====
-  ipcMain.handle(IPC.INJECT_TEXT, async (_event, text: string) => {
-    console.log(`[Injection] Injecting ${text.length} chars: "${text.substring(0, 60)}"`);
-    const wasVisible = mainWindow.isVisible();
-
-    // Always hide window before paste — even if not focused, the window may
-    // be on top and intercept the xdotool keypress on Linux/X11
-    if (wasVisible) {
-      mainWindow.hide();
-      await new Promise(r => setTimeout(r, 200)); // let OS restore focus to previous app
-    }
-
-    await textInjector.injectText(text);
-    console.log('[Injection] Done');
-
-    // Restore window after paste
-    if (wasVisible) {
-      await new Promise(r => setTimeout(r, 150));
-      mainWindow.showInactive(); // show without stealing focus
-    }
-  });
-
-  ipcMain.handle(IPC.INJECT_CLIPBOARD, async (_event, text: string) => {
-    textInjector.copyToClipboard(text);
-  });
-
-  // ===== History =====
-  ipcMain.handle(IPC.HISTORY_GET, (_event, filter) => {
-    return historyService.get(filter);
-  });
-
-  ipcMain.handle(IPC.HISTORY_SEARCH, (_event, query: string) => {
-    return historyService.get({ search: query });
-  });
-
-  ipcMain.handle(IPC.HISTORY_DELETE, (_event, id: string) => {
-    historyService.delete(id);
-  });
-
-  ipcMain.handle(IPC.HISTORY_ADD_TAG, (_event, id: string, tag: string) => {
-    historyService.addTag(id, tag);
-  });
-
-  ipcMain.handle(IPC.HISTORY_REMOVE_TAG, (_event, id: string, tag: string) => {
-    historyService.removeTag(id, tag);
-  });
-
-  ipcMain.handle(IPC.HISTORY_EXPORT, async (_event, id: string, format: string) => {
-    const entry = historyService.getById(id);
-    if (!entry) throw new Error('Entry not found');
-
-    const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: `voiceink-${id.slice(0, 8)}.${format}`,
-      filters: [{ name: format.toUpperCase(), extensions: [format] }],
-    });
-
-    if (result.canceled || !result.filePath) return null;
-    return exportService.exportEntry(entry, format as any, result.filePath);
-  });
-
-  // ===== Model Download =====
-  ipcMain.handle(IPC.STT_DOWNLOAD_MODEL, async (_event, model: string) => {
-    try {
-      const modelPath = await whisperEngine.downloadModel(model as any, (progress) => {
-        mainWindow.webContents.send(IPC.STT_MODEL_PROGRESS, progress);
+        wordCount: wordCount(final),
       });
-      return modelPath;
-    } catch (error: any) {
-      throw error;
-    }
-  });
 
-  // ===== STT Status =====
-  ipcMain.handle(IPC.STT_STATUS, () => {
-    return whisperEngine.getModelStatus();
-  });
-
-  // ===== Chat =====
-  ipcMain.handle(IPC.CHAT_SEND, async (_event, messages: { role: string; content: string }[]) => {
-    try {
-      const result = await llmEngine.chatStream(messages, (token: string) => {
-        mainWindow.webContents.send(IPC.CHAT_STREAM, token);
-      });
-      return result;
-    } catch (error: any) {
-      console.error('Chat error:', error);
-      throw error;
-    }
-  });
-
-  // ===== App Controls =====
-  ipcMain.on(IPC.APP_QUIT, () => {
-    app.quit();
-  });
-
-  ipcMain.on(IPC.APP_MINIMIZE, () => {
-    mainWindow.minimize();
-  });
-
-  ipcMain.on(IPC.APP_TOGGLE_RECORDING, () => {
-    if (currentRecordingState === 'idle') {
-      currentRecordingState = 'recording';
-      mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'recording');
-    } else if (currentRecordingState === 'recording') {
-      currentRecordingState = 'processing';
-      mainWindow.webContents.send(IPC.APP_RECORDING_STATE, 'processing');
-    }
-  });
-
-  // ===== Compact Mode =====
-  let savedBounds: { x: number; y: number; width: number; height: number } | null = null;
-
-  ipcMain.handle(IPC.APP_COMPACT_MODE, (_event, compact: boolean, width?: number, height?: number) => {
-    if (compact) {
-      if (!savedBounds) savedBounds = mainWindow.getBounds();
-      const display = screen.getPrimaryDisplay();
-      const { width: screenW } = display.workAreaSize;
-      const cw = width  || 90;
-      const ch = height || 90;
-      mainWindow.setMinimumSize(60, 60);
-      mainWindow.setResizable(false);
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-      mainWindow.setBounds({ x: Math.round(screenW / 2 - cw / 2), y: 18, width: cw, height: ch });
-    } else {
-      // Panel mode: compact floating panel, still on top
-      const pw = width  || 320;
-      const ph = height || 420;
-      mainWindow.setMinimumSize(280, 360);
-      mainWindow.setMaximumSize(400, 520);
-      mainWindow.setResizable(true);
-      mainWindow.setAlwaysOnTop(true, 'floating');
-      if (savedBounds) {
-        const pos = mainWindow.getPosition();
-        mainWindow.setBounds({ x: pos[0], y: pos[1], width: pw, height: ph });
-        savedBounds = null;
-      } else {
-        mainWindow.setSize(pw, ph);
+      if (settings.autoCopy || settings.autoInject) {
+        try { clipboard.writeText(final); } catch {}
       }
+
+      return {
+        ok: true,
+        rawText,
+        finalText: final,
+        detectedLanguage: r.language,
+        translatedTo: translateTo || undefined,
+        durationMs,
+      };
+    } catch (err: any) {
+      console.error('[transcribe] error:', err?.message || err);
+      return {
+        ok: false,
+        rawText: '',
+        finalText: '',
+        durationMs: Date.now() - t0,
+        error: err?.message || String(err),
+      };
     }
-    return true;
   });
-
-  // ===== Orb Position Persistence =====
-  ipcMain.handle(IPC.APP_SET_ORB_POSITION, (_event, x: number, y: number) => {
-    configService.updateSettings({ _orbPosition: { x, y } } as any);
-  });
-
-  ipcMain.handle(IPC.APP_GET_ORB_POSITION, () => {
-    const settings = configService.getSettings() as any;
-    return settings?._orbPosition || null;
-  });
-}
-
-function sendPipelineStatus(mainWindow: BrowserWindow, status: PipelineStatus): void {
-  mainWindow.webContents.send(IPC.APP_PIPELINE_STATUS, status);
 }

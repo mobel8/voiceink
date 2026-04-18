@@ -1,104 +1,84 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
-const types_1 = require("../shared/types");
+/**
+ * IPC channel names. Must stay in sync with `src/shared/types.ts::IPC`.
+ * We duplicate them here because the preload runs in a sandbox that
+ * cannot resolve local modules.
+ */
+const IPC = {
+    TRANSCRIBE: 'voiceink:transcribe',
+    GET_SETTINGS: 'voiceink:getSettings',
+    SET_SETTINGS: 'voiceink:setSettings',
+    GET_HISTORY: 'voiceink:getHistory',
+    ADD_HISTORY: 'voiceink:addHistory',
+    DELETE_HISTORY: 'voiceink:deleteHistory',
+    CLEAR_HISTORY: 'voiceink:clearHistory',
+    INJECT_TEXT: 'voiceink:injectText',
+    COPY_TEXT: 'voiceink:copyText',
+    EXPORT: 'voiceink:export',
+    ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
+    ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
+    WINDOW_MINIMIZE: 'voiceink:windowMinimize',
+    WINDOW_CLOSE: 'voiceink:windowClose',
+    WINDOW_MAXIMIZE: 'voiceink:windowMaximize',
+    WINDOW_SET_ALWAYS_ON_TOP: 'voiceink:windowSetAlwaysOnTop',
+    WINDOW_RESIZE_FOR_DENSITY: 'voiceink:windowResizeForDensity',
+    WIDGET_CONTEXT_MENU: 'voiceink:widgetContextMenu',
+    TOGGLE_PIN_HISTORY: 'voiceink:togglePinHistory',
+    EXPORT_HISTORY: 'voiceink:exportHistory',
+    GET_USAGE_STATS: 'voiceink:getUsageStats',
+    SET_AUTO_START: 'voiceink:setAutoStart',
+    ON_PTT_DOWN: 'voiceink:onPttDown',
+    ON_PTT_UP: 'voiceink:onPttUp',
+    LOG: 'voiceink:log',
+};
 const api = {
-    // Audio
-    getAudioDevices: () => electron_1.ipcRenderer.invoke(types_1.IPC.AUDIO_DEVICES),
-    startAudio: () => electron_1.ipcRenderer.invoke(types_1.IPC.AUDIO_START),
-    stopAudio: () => electron_1.ipcRenderer.invoke(types_1.IPC.AUDIO_STOP),
-    onAudioLevel: (cb) => {
-        const handler = (_, level) => cb(level);
-        electron_1.ipcRenderer.on(types_1.IPC.AUDIO_LEVEL, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.AUDIO_LEVEL, handler);
-    },
-    // STT
-    transcribe: (audioPath, language) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_TRANSCRIBE, audioPath, language),
-    transcribeFileSTT: (filePath) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_TRANSCRIBE_FILE, filePath),
-    onSTTResult: (cb) => {
-        const handler = (_, result) => cb(result);
-        electron_1.ipcRenderer.on(types_1.IPC.STT_RESULT, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.STT_RESULT, handler);
-    },
-    onSTTPartial: (cb) => {
-        const handler = (_, text) => cb(text);
-        electron_1.ipcRenderer.on(types_1.IPC.STT_PARTIAL, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.STT_PARTIAL, handler);
-    },
-    onSTTStatus: (cb) => {
-        const handler = (_, status) => cb(status);
-        electron_1.ipcRenderer.on(types_1.IPC.STT_STATUS, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.STT_STATUS, handler);
-    },
-    downloadModel: (model) => electron_1.ipcRenderer.invoke(types_1.IPC.STT_DOWNLOAD_MODEL, model),
-    onModelProgress: (cb) => {
-        const handler = (_, progress) => cb(progress);
-        electron_1.ipcRenderer.on(types_1.IPC.STT_MODEL_PROGRESS, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.STT_MODEL_PROGRESS, handler);
-    },
-    // LLM
-    processText: (text, mode, targetLang) => electron_1.ipcRenderer.invoke(types_1.IPC.LLM_PROCESS, text, mode, targetLang),
-    onLLMResult: (cb) => {
-        const handler = (_, result) => cb(result);
-        electron_1.ipcRenderer.on(types_1.IPC.LLM_RESULT, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.LLM_RESULT, handler);
-    },
-    onLLMStream: (cb) => {
-        const handler = (_, chunk) => cb(chunk);
-        electron_1.ipcRenderer.on(types_1.IPC.LLM_STREAM, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.LLM_STREAM, handler);
-    },
-    onLLMStatus: (cb) => {
-        const handler = (_, status) => cb(status);
-        electron_1.ipcRenderer.on(types_1.IPC.LLM_STATUS, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.LLM_STATUS, handler);
-    },
-    // Injection
-    injectText: (text) => electron_1.ipcRenderer.invoke(types_1.IPC.INJECT_TEXT, text),
-    copyToClipboard: (text) => electron_1.ipcRenderer.invoke(types_1.IPC.INJECT_CLIPBOARD, text),
-    // History
-    getHistory: (filter) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_GET, filter),
-    searchHistory: (query) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_SEARCH, query),
-    deleteHistory: (id) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_DELETE, id),
-    exportHistory: (id, format) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_EXPORT, id, format),
-    addTag: (id, tag) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_ADD_TAG, id, tag),
-    removeTag: (id, tag) => electron_1.ipcRenderer.invoke(types_1.IPC.HISTORY_REMOVE_TAG, id, tag),
-    // Settings
-    getSettings: () => electron_1.ipcRenderer.invoke(types_1.IPC.SETTINGS_GET),
-    setSettings: (settings) => electron_1.ipcRenderer.invoke(types_1.IPC.SETTINGS_SET, settings),
-    resetSettings: () => electron_1.ipcRenderer.invoke(types_1.IPC.SETTINGS_RESET),
-    // App
-    quit: () => electron_1.ipcRenderer.send(types_1.IPC.APP_QUIT),
-    minimize: () => electron_1.ipcRenderer.send(types_1.IPC.APP_MINIMIZE),
-    toggleRecording: () => electron_1.ipcRenderer.send(types_1.IPC.APP_TOGGLE_RECORDING),
-    setCompactMode: (compact, width, height) => electron_1.ipcRenderer.invoke(types_1.IPC.APP_COMPACT_MODE, compact, width, height),
-    setOrbPosition: (x, y) => electron_1.ipcRenderer.invoke(types_1.IPC.APP_SET_ORB_POSITION, x, y),
-    getOrbPosition: () => electron_1.ipcRenderer.invoke(types_1.IPC.APP_GET_ORB_POSITION),
+    getSettings: () => electron_1.ipcRenderer.invoke(IPC.GET_SETTINGS),
+    setSettings: (patch) => electron_1.ipcRenderer.invoke(IPC.SET_SETTINGS, patch),
+    transcribe: (req) => electron_1.ipcRenderer.invoke(IPC.TRANSCRIBE, req),
+    getHistory: () => electron_1.ipcRenderer.invoke(IPC.GET_HISTORY),
+    deleteHistory: (id) => electron_1.ipcRenderer.invoke(IPC.DELETE_HISTORY, id),
+    clearHistory: () => electron_1.ipcRenderer.invoke(IPC.CLEAR_HISTORY),
+    togglePinHistory: (id) => electron_1.ipcRenderer.invoke(IPC.TOGGLE_PIN_HISTORY, id),
+    exportHistory: (format) => electron_1.ipcRenderer.invoke(IPC.EXPORT_HISTORY, format),
+    getUsageStats: () => electron_1.ipcRenderer.invoke(IPC.GET_USAGE_STATS),
+    setAutoStart: (enabled) => electron_1.ipcRenderer.invoke(IPC.SET_AUTO_START, enabled),
+    copyText: (text) => electron_1.ipcRenderer.invoke(IPC.COPY_TEXT, text),
+    injectText: (text) => electron_1.ipcRenderer.invoke(IPC.INJECT_TEXT, text),
     onToggleRecording: (cb) => {
-        const handler = () => cb();
-        electron_1.ipcRenderer.on(types_1.IPC.APP_TOGGLE_RECORDING, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.APP_TOGGLE_RECORDING, handler);
+        const listener = () => cb();
+        electron_1.ipcRenderer.on(IPC.ON_TOGGLE_RECORDING, listener);
+        return () => electron_1.ipcRenderer.removeListener(IPC.ON_TOGGLE_RECORDING, listener);
     },
-    onRecordingState: (cb) => {
-        const handler = (_, state) => cb(state);
-        electron_1.ipcRenderer.on(types_1.IPC.APP_RECORDING_STATE, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.APP_RECORDING_STATE, handler);
+    onPttDown: (cb) => {
+        const listener = () => cb();
+        electron_1.ipcRenderer.on(IPC.ON_PTT_DOWN, listener);
+        return () => electron_1.ipcRenderer.removeListener(IPC.ON_PTT_DOWN, listener);
     },
-    onPipelineStatus: (cb) => {
-        const handler = (_, status) => cb(status);
-        electron_1.ipcRenderer.on(types_1.IPC.APP_PIPELINE_STATUS, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.APP_PIPELINE_STATUS, handler);
+    onPttUp: (cb) => {
+        const listener = () => cb();
+        electron_1.ipcRenderer.on(IPC.ON_PTT_UP, listener);
+        return () => electron_1.ipcRenderer.removeListener(IPC.ON_PTT_UP, listener);
     },
-    // Chat
-    sendChat: (messages) => electron_1.ipcRenderer.invoke(types_1.IPC.CHAT_SEND, messages),
-    onChatStream: (cb) => {
-        const handler = (_, token) => cb(token);
-        electron_1.ipcRenderer.on(types_1.IPC.CHAT_STREAM, handler);
-        return () => electron_1.ipcRenderer.removeListener(types_1.IPC.CHAT_STREAM, handler);
+    windowMinimize: () => electron_1.ipcRenderer.invoke(IPC.WINDOW_MINIMIZE),
+    windowMaximize: () => electron_1.ipcRenderer.invoke(IPC.WINDOW_MAXIMIZE),
+    windowClose: () => electron_1.ipcRenderer.invoke(IPC.WINDOW_CLOSE),
+    windowSetAlwaysOnTop: (enabled) => electron_1.ipcRenderer.invoke(IPC.WINDOW_SET_ALWAYS_ON_TOP, enabled),
+    windowResizeForDensity: (density) => electron_1.ipcRenderer.invoke(IPC.WINDOW_RESIZE_FOR_DENSITY, density),
+    showWidgetContextMenu: () => electron_1.ipcRenderer.invoke(IPC.WIDGET_CONTEXT_MENU),
+    onOpenSettings: (cb) => {
+        const listener = () => cb();
+        electron_1.ipcRenderer.on('voiceink:openSettings', listener);
+        return () => electron_1.ipcRenderer.removeListener('voiceink:openSettings', listener);
     },
-    // File
-    openFile: () => electron_1.ipcRenderer.invoke(types_1.IPC.FILE_OPEN),
-    transcribeFile: (filePath) => electron_1.ipcRenderer.invoke(types_1.IPC.FILE_TRANSCRIBE, filePath),
-    exportFile: (id, format, outputPath) => electron_1.ipcRenderer.invoke(types_1.IPC.FILE_EXPORT, id, format, outputPath),
+    log: (...args) => electron_1.ipcRenderer.invoke(IPC.LOG, ...args),
+    /**
+     * Fire-and-forget "renderer has rendered its first real frame" signal.
+     * Main process uses this to gate window-visibility swaps during a
+     * density hot-swap, so the new window never appears while it's still
+     * painting the (possibly wrong-for-its-size) shell frame.
+     */
+    rendererReady: () => electron_1.ipcRenderer.send('voiceink:renderer-ready'),
 };
 electron_1.contextBridge.exposeInMainWorld('voiceink', api);

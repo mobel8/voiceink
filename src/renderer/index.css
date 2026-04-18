@@ -1,419 +1,979 @@
 @import "tailwindcss";
 
-/* ===== Dark Theme ===== */
-:root,
-[data-theme="dark"] {
-  --bg-primary:    #060610;
-  --bg-secondary:  #0c0c1e;
-  --bg-tertiary:   #111124;
-  --bg-surface:    #09091a;
-  --bg-elevated:   #161630;
-  --bg-input:      #0e0e22;
-  --accent:        #8b78ff;
-  --accent-hover:  #a494ff;
-  --accent-dim:    #6652e0;
-  --accent-glow:   rgba(139, 120, 255, 0.35);
-  --accent-subtle: rgba(139, 120, 255, 0.10);
-  --accent-muted:  rgba(139, 120, 255, 0.5);
-  --text-primary:  #f0f0ff;
-  --text-secondary:#8080b8;
-  --text-muted:    #3a3a60;
-  --border:        rgba(255, 255, 255, 0.07);
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-bright: rgba(255, 255, 255, 0.13);
-  --success:       #34d399;
-  --warning:       #fbbf24;
-  --danger:        #f87171;
-  --recording:     #f43f5e;
-  --processing:    #fb923c;
-  --card-bg:       rgba(10, 10, 22, 0.92);
-  --card-border:   rgba(139, 120, 255, 0.08);
-  --dropdown-bg:   #0e0e22;
-  --hover-bg:      rgba(255, 255, 255, 0.045);
-  --pill-active-bg:     rgba(139, 120, 255, 0.14);
-  --pill-active-border: rgba(139, 120, 255, 0.28);
-  --scrollbar-thumb: rgba(255,255,255,0.08);
-  --scrollbar-hover: rgba(255,255,255,0.16);
-  --glass-bg:      rgba(9, 9, 22, 0.88);
-  --glass-border:  rgba(255, 255, 255, 0.08);
-  --shadow-soft:   0 8px 48px rgba(0,0,0,0.7), 0 2px 12px rgba(0,0,0,0.4);
-  --shadow-glow:   0 0 50px rgba(139,120,255,0.18), 0 0 100px rgba(139,120,255,0.06);
-  --shadow-card:   0 4px 24px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.04) inset;
-  --gradient-surface: radial-gradient(ellipse 120% 70% at 50% -5%,
-      rgba(139,120,255,0.13) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(100,80,220,0.05) 0%, transparent 50%),
-    linear-gradient(180deg, #060610 0%, #08081a 100%);
-  --gradient-accent: linear-gradient(135deg, #8b78ff, #6652e0);
-  --gradient-card:   linear-gradient(160deg, rgba(139,120,255,0.06) 0%, transparent 60%);
-  --gradient-mic:    linear-gradient(145deg, #a494ff 0%, #8b78ff 55%, #6652e0 100%);
-  --gradient-mic-rec:linear-gradient(145deg, #ff7c7c 0%, #f43f5e 55%, #dc2626 100%);
+/* =========================================================
+   VoiceInk — Design System
+   Theme: dark, glassmorphism, violet/fuchsia/cyan gradients
+   ========================================================= */
+
+:root {
+  /* These defaults match the Midnight theme and are overwritten at runtime
+     by src/renderer/lib/theme.ts whenever the user changes palette. */
+  --bg-0: #07070d;
+  --bg-1: #0d0d18;
+  --bg-2: #141426;
+  --line: rgba(255,255,255,0.06);
+  --line-strong: rgba(255,255,255,0.12);
+  --text: #f4f4fb;
+  --text-dim: #9ca0b5;
+  --text-mute: #626580;
+
+  --accent-1: #8b5cf6;
+  --accent-2: #d946ef;
+  --accent-3: #22d3ee;
+  --accent-1-rgb: 139,92,246;
+  --accent-2-rgb: 217,70,239;
+  --accent-3-rgb: 34,211,238;
+  --accent-1-dim: #5b21b6;
+  --accent-1-light: #a78bfa;
+
+  --aura-1: #8b5cf6;
+  --aura-2: #22d3ee;
+  --aura-3: #d946ef;
+
+  --danger: #f43f5e;
+  --success: #10b981;
+  --warn: #f59e0b;
+  --info: #22d3ee;
+  --danger-rgb: 244,63,94;
+  --success-rgb: 16,185,129;
+
+  /* Legacy aliases for code not yet refactored. */
+  --violet: var(--accent-1);
+  --fuchsia: var(--accent-2);
+  --cyan: var(--accent-3);
+  --rose: var(--danger);
+  --green: var(--success);
+  --amber: var(--warn);
+
+  /* Effect tunables overridden by applyTheme. */
+  --glow-intensity: 0.65;
+  --blur-strength: 18px;
+
+  /* Foreground on top of accent-1. Overwritten at runtime by applyTheme
+     based on accent luminance (white for dark accents, black for light). */
+  --on-accent: #ffffff;
 }
 
-/* ===== Light Theme ===== */
-[data-theme="light"] {
-  --bg-primary:    #f4f4fc;
-  --bg-secondary:  #ecedf5;
-  --bg-tertiary:   #e4e5f0;
-  --bg-surface:    #f8f8fd;
-  --bg-elevated:   #ffffff;
-  --bg-input:      #ffffff;
-  --accent:        #6d54f0;
-  --accent-hover:  #7c6af7;
-  --accent-dim:    #5641cc;
-  --accent-glow:   rgba(109, 84, 240, 0.2);
-  --accent-subtle: rgba(109, 84, 240, 0.07);
-  --accent-muted:  rgba(109, 84, 240, 0.4);
-  --text-primary:  #0f0f20;
-  --text-secondary:#5a5a80;
-  --text-muted:    #a0a0be;
-  --border:        rgba(0,0,0,0.07);
-  --border-subtle: rgba(0,0,0,0.04);
-  --border-bright: rgba(0,0,0,0.12);
-  --success:       #059669;
-  --warning:       #d97706;
-  --danger:        #dc2626;
-  --recording:     #dc2626;
-  --processing:    #ea580c;
-  --card-bg:       rgba(255,255,255,0.92);
-  --card-border:   rgba(0,0,0,0.06);
-  --dropdown-bg:   #ffffff;
-  --hover-bg:      rgba(0,0,0,0.03);
-  --pill-active-bg:     rgba(109,84,240,0.08);
-  --pill-active-border: rgba(109,84,240,0.2);
-  --scrollbar-thumb: rgba(0,0,0,0.10);
-  --scrollbar-hover: rgba(0,0,0,0.18);
-  --glass-bg:      rgba(248,248,252,0.88);
-  --glass-border:  rgba(0,0,0,0.07);
-  --shadow-soft:   0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-glow:   0 0 24px rgba(109,84,240,0.1);
-  --gradient-surface: radial-gradient(ellipse 120% 80% at 50% 20%,
-      rgba(109,84,240,0.04) 0%, transparent 60%),
-    linear-gradient(180deg, #f6f6fc 0%, #f4f4fc 100%);
-  --gradient-accent: linear-gradient(135deg, #6d54f0, #5641cc);
-  --gradient-card:   linear-gradient(180deg, rgba(109,84,240,0.02) 0%, transparent 100%);
-  --gradient-mic:    linear-gradient(145deg, #7c6af7 0%, #6d54f0 55%, #5641cc 100%);
-  --gradient-mic-rec:linear-gradient(145deg, #f87171 0%, #ef4444 55%, #dc2626 100%);
-}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+html { color-scheme: dark; }
 
-/* ===== Reset ===== */
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-html, body, #root {
-  height: 100%;
-  width: 100%;
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  color: var(--text);
+  background: var(--bg-0);
   overflow: hidden;
-  font-family: 'Ubuntu', 'Cantarell', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
-  background: transparent;
-  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.012em;
+  user-select: none;
 }
 
-/* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 3px; height: 3px; }
+/* Pill widget mode: make html/body/root transparent so the floating
+   pill looks detached from any window chrome. */
+html[data-density="compact"],
+html[data-density="compact"] body,
+html[data-density="compact"] #root {
+  background: transparent !important;
+}
+
+/* Ambient animated background */
+.bg-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bg-aurora::before,
+.bg-aurora::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: calc(0.25 + 0.35 * var(--glow-intensity));
+  animation: float 18s ease-in-out infinite;
+  /* Promote to its own compositor layer so the float animation
+     runs on the GPU and never invalidates siblings. */
+  will-change: transform;
+  transform: translateZ(0);
+}
+.bg-aurora::before {
+  width: 55vw; height: 55vw;
+  left: -10vw; top: -15vw;
+  background: radial-gradient(circle, var(--aura-1) 0%, transparent 60%);
+}
+.bg-aurora::after {
+  width: 50vw; height: 50vw;
+  right: -10vw; bottom: -15vw;
+  background: radial-gradient(circle, var(--aura-2) 0%, transparent 60%);
+  animation-delay: -9s;
+}
+.bg-aurora .spot-3 {
+  position: absolute;
+  width: 40vw; height: 40vw;
+  left: 30vw; top: 20vh;
+  background: radial-gradient(circle, var(--aura-3) 0%, transparent 60%);
+  filter: blur(120px);
+  opacity: calc(0.10 + 0.22 * var(--glow-intensity));
+  border-radius: 50%;
+  animation: float 22s ease-in-out infinite -5s;
+  will-change: transform;
+  transform: translateZ(0);
+}
+/* Effects: disable aura animation when user opts out */
+html[data-animate-aura="0"] .bg-aurora::before,
+html[data-animate-aura="0"] .bg-aurora::after,
+html[data-animate-aura="0"] .bg-aurora .spot-3 {
+  animation: none !important;
+}
+/* Hide aura entirely when disabled */
+html[data-aura-enabled="0"] .bg-aurora { display: none; }
+/* Optional cinematic grain overlay */
+html[data-grain="1"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.5) 1px, transparent 1px);
+  background-size: 3px 3px, 3px 3px;
+  background-position: 0 0, 1px 1px;
+}
+@keyframes float {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%     { transform: translate(4vw,-3vh) scale(1.08); }
+  66%     { transform: translate(-3vw,4vh) scale(0.95); }
+}
+
+/* Accessibility + perf: honour the OS-level "reduce motion" preference.
+   Also cuts the GPU cost of permanent animations for users who opt in. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.05s !important;
+  }
+  .bg-aurora::before,
+  .bg-aurora::after,
+  .bg-aurora .spot-3 {
+    animation: none !important;
+  }
+}
+
+/* Glass surfaces — blur strength driven by theme effect.
+   `contain: layout paint style` scopes re-layouts & repaints inside the
+   panel so changing --blur-strength doesn't invalidate the whole page. */
+.glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015));
+  border: 1px solid var(--line);
+  backdrop-filter: blur(var(--blur-strength)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(140%);
+  position: relative;
+  overflow: hidden;
+  contain: layout paint style;
+}
+.glass-strong {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--line-strong);
+  backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(160%);
+  -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(160%);
+  position: relative;
+  overflow: hidden;
+  contain: layout paint style;
+}
+/* Shimmer highlight on hover (only when enabled) */
+html[data-shimmer="1"] .glass::before,
+html[data-shimmer="1"] .glass-strong::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -150%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(var(--accent-1-rgb), 0.08) 50%,
+    transparent 60%
+  );
+  transform: skewX(-20deg);
+  transition: left 0.7s ease;
+  pointer-events: none;
+}
+html[data-shimmer="1"] .glass:hover::before,
+html[data-shimmer="1"] .glass-strong:hover::before {
+  left: 150%;
+}
+
+/* Titlebar drag regions */
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
-.scrollbar-hide::-webkit-scrollbar { display: none; }
-.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); background-clip: padding-box; }
 
-/* ===== Drag regions ===== */
-.titlebar-drag    { -webkit-app-region: drag; }
-.titlebar-no-drag { -webkit-app-region: no-drag; }
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.2s ease, color 0.15s ease, filter 0.15s ease;
+  cursor: pointer;
+}
+.btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 20px rgba(var(--accent-1-rgb), calc(0.2 + 0.35 * var(--glow-intensity)));
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 28px rgba(var(--accent-1-rgb), calc(0.3 + 0.45 * var(--glow-intensity)));
+}
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: rgba(255,255,255,0.06); }
+.btn-danger { border-color: rgba(var(--danger-rgb), 0.35); color: rgba(var(--danger-rgb), 0.9); }
+.btn-danger:hover { background: rgba(var(--danger-rgb), 0.12); }
 
-/* ===== Focus / Selection ===== */
-:focus-visible {
-  outline: 2px solid var(--accent);
+/* Form inputs */
+.input, .select, .textarea {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent-1);
+  box-shadow: 0 0 0 3px rgba(var(--accent-1-rgb), 0.18);
+}
+.textarea { resize: vertical; min-height: 88px; font-family: inherit; }
+.label { font-size: 0.75rem; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Style the native <option> list on dark platforms. Browsers only honour
+   `background` / `color` on options in certain cases, but applying it
+   everywhere keeps the dropdown consistent with the rest of the theme. */
+.select option,
+.picker-chip option {
+  background: #0d0d18;
+  color: #e8e8ef;
+}
+
+/*
+ * Compact "chip" picker — shared by the Mode / Language / Translate
+ * selectors in the MainView header so they line up with the same colour,
+ * shape and hover behaviour. Accent ring lights up when the chip's value
+ * is non-default (i.e. the feature is "active").
+ */
+.picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  transition: border-color 0.15s ease, background 0.2s ease, box-shadow 0.15s ease;
+  color: var(--text);
+  font-size: 12px;
+}
+.picker-chip:hover {
+  border-color: rgba(var(--accent-1-rgb), 0.45);
+  background: rgba(var(--accent-1-rgb), 0.06);
+}
+.picker-chip.is-active {
+  border-color: rgba(var(--accent-1-rgb), 0.45);
+  background: rgba(var(--accent-1-rgb), 0.08);
+}
+.picker-chip .picker-chip-icon {
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+.picker-chip.is-active .picker-chip-icon,
+.picker-chip:hover .picker-chip-icon {
+  color: var(--accent-1);
+}
+.picker-chip select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding-right: 14px;
+  /* Custom chevron so the select arrow matches the theme instead of using
+     the default OS caret (often light gray on dark). */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'><path d='M2 3.5L5 6.5L8 3.5' stroke='rgba(255,255,255,0.55)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+}
+.picker-chip select:focus-visible {
+  outline: 2px solid rgba(var(--accent-1-rgb), 0.45);
   outline-offset: 2px;
   border-radius: 4px;
 }
-::selection {
-  background: rgba(124, 106, 247, 0.22);
-  color: var(--text-primary);
+
+/* =========================================================
+   Record button — proportional to the window.
+   -----------------------------------------------------------
+   `--rec-size` uses clamp(min, preferred, max) with vmin so
+   the button grows/shrinks with the window but never becomes
+   too small (unusable) or too large (overwhelming). The inner
+   icon and outer halo scale from the same base via calc().
+   ========================================================= */
+:root {
+  /* min 80px · ~13% of the shortest viewport side · max 140px */
+  --rec-size: clamp(80px, 13vmin, 140px);
+  --rec-icon: calc(var(--rec-size) * 0.33);
+  --rec-halo: calc(var(--rec-size) * 0.14);
+  --rec-shadow-lg: 0 18px 50px -14px rgba(var(--accent-1-rgb), calc(0.35 + 0.35 * var(--glow-intensity)));
+}
+.density-compact {
+  /* Compact pill mode uses its own mini record button (.record-mini), but
+     we still override in case .record-btn is rendered somewhere. */
+  --rec-size: 56px;
+  --rec-icon: 20px;
+  --rec-halo: 8px;
+  --rec-shadow-lg: 0 10px 30px -8px rgba(var(--accent-1-rgb), calc(0.35 + 0.35 * var(--glow-intensity)));
 }
 
-/* ===== Glass Card ===== */
-.glass-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(40px) saturate(1.6) brightness(1.02);
-  -webkit-backdrop-filter: blur(40px) saturate(1.6) brightness(1.02);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-soft), 0 0 0 0.5px rgba(255,255,255,0.02) inset;
-}
-
-/* ===== Result Card ===== */
-.result-card {
+.record-btn {
   position: relative;
-  background: var(--card-bg);
-  backdrop-filter: blur(32px) saturate(1.4);
-  -webkit-backdrop-filter: blur(32px) saturate(1.4);
-  border: 1px solid var(--card-border);
-  box-shadow: var(--shadow-card);
-}
-.result-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--gradient-card);
-  pointer-events: none;
-}
-.result-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.03) inset;
-  pointer-events: none;
-}
-
-/* ===== Mode Pill ===== */
-.mode-pill {
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid transparent;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-.mode-pill:hover { background: var(--hover-bg); color: var(--text-secondary) !important; }
-.mode-pill.active {
-  background: var(--pill-active-bg);
-  color: var(--accent) !important;
-  border-color: var(--pill-active-border);
-  font-weight: 600;
-  box-shadow: 0 0 12px rgba(139,120,255,0.12);
-}
-
-/* ===== Shared input style ===== */
-.input-base {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  line-height: 1.5;
+  width: var(--rec-size); height: var(--rec-size);
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: radial-gradient(circle at 30% 28%, var(--accent-1-light), var(--accent-1) 55%, var(--accent-1-dim));
+  box-shadow:
+    var(--rec-shadow-lg),
+    inset 0 2px 14px rgba(255,255,255,0.18),
+    inset 0 -4px 16px rgba(0,0,0,0.28);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.25s ease;
+  display: grid; place-items: center;
+  color: var(--on-accent);
   outline: none;
-  transition: border-color 0.15s ease;
-  width: 100%;
 }
-.input-base::placeholder { color: var(--text-muted); }
-.input-base:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
-
-select.input-base option { background: var(--dropdown-bg); color: var(--text-primary); }
-
-/* ===== Buttons ===== */
-.btn-ghost {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
-  color: var(--text-secondary); background: transparent;
-  border: 1px solid var(--border);
-  transition: all 0.15s ease; cursor: pointer;
+/* Override the Lucide SVG dimensions so the icon scales with the button. */
+.record-btn > svg {
+  width: var(--rec-icon);
+  height: var(--rec-icon);
 }
-.btn-ghost:hover { background: var(--hover-bg); color: var(--text-primary); border-color: var(--border-bright); }
-
-.btn-accent {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600;
-  color: white; background: var(--accent);
-  border: none; transition: all 0.15s ease; cursor: pointer;
+.record-btn:focus-visible { box-shadow: var(--rec-shadow-lg), 0 0 0 3px rgba(var(--accent-1-rgb),0.55); }
+.record-btn:hover { transform: scale(1.04); }
+.record-btn:active { transform: scale(0.96); }
+.record-btn:disabled { cursor: progress; opacity: 0.95; }
+.record-btn.recording {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #fda4af, #f43f5e 55%, #9f1239);
+  box-shadow:
+    0 16px 44px -12px rgba(244,63,94,0.65),
+    inset 0 2px 14px rgba(255,255,255,0.22),
+    inset 0 -4px 16px rgba(0,0,0,0.28);
+  animation: pulse-red 1.4s ease-in-out infinite;
 }
-.btn-accent:hover { background: var(--accent-hover); }
-.btn-accent:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* ===== Icon button ===== */
-.icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 7px;
-  color: var(--text-muted); background: transparent;
-  border: 1px solid transparent; cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+.record-btn.processing {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #67e8f9, #06b6d4 55%, #155e75);
+  box-shadow:
+    0 16px 44px -12px rgba(34,211,238,0.6),
+    inset 0 2px 14px rgba(255,255,255,0.22);
 }
-.icon-btn:hover { background: var(--hover-bg); color: var(--text-secondary); border-color: var(--border); }
-.icon-btn.active { color: var(--accent); background: var(--accent-subtle); border-color: var(--pill-active-border); }
-
-/* ===== Animations ===== */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes pulse-red {
+  0%,100% { box-shadow: 0 16px 44px -12px rgba(244,63,94,0.65), 0 0 0 0 rgba(244,63,94,0.45); }
+  50%     { box-shadow: 0 16px 44px -12px rgba(244,63,94,0.65), 0 0 0 18px rgba(244,63,94,0); }
 }
-.animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
-}
-.animate-scale-in { animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
-
-/* ===== Ripple rings ===== */
-@keyframes ripple {
-  0%   { transform: scale(0.85); opacity: 0.6; }
-  100% { transform: scale(3.6); opacity: 0; }
-}
-.ripple-ring {
-  animation: ripple 2.8s cubic-bezier(0.05, 0.2, 0.5, 1) infinite;
+.record-halo {
+  position: absolute; inset: calc(var(--rec-halo) * -1);
+  border-radius: 50%;
+  border: 2px solid rgba(var(--accent-1-rgb), calc(0.1 + 0.22 * var(--glow-intensity)));
   pointer-events: none;
 }
-.ripple-ring:nth-child(2) { animation-delay: 0.7s; }
-.ripple-ring:nth-child(3) { animation-delay: 1.4s; }
+.record-halo.recording { border-color: rgba(244,63,94,0.38); animation: halo-expand 1.8s ease-out infinite; }
+@keyframes halo-expand {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
 
-/* ===== Mic glow ===== */
-@keyframes mic-breathe {
-  0%,100% { box-shadow: 0 0 32px rgba(139,120,255,0.26), 0 0 70px rgba(139,120,255,0.09), 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15); }
-  50%     { box-shadow: 0 0 44px rgba(139,120,255,0.42), 0 0 90px rgba(139,120,255,0.15), 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15); }
+/* Spinner */
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255,255,255,0.18);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
-.mic-glow { animation: mic-breathe 3.5s ease-in-out infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes mic-recording {
-  0%,100% { box-shadow: 0 0 28px rgba(244, 63, 94, 0.38), 0 0 65px rgba(244, 63, 94, 0.14), 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12); }
-  50%     { box-shadow: 0 0 42px rgba(244, 63, 94, 0.58), 0 0 95px rgba(244, 63, 94, 0.22), 0 2px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12); }
+/* Waveform bars — height scales proportionally with the window. */
+.wave {
+  display: flex; align-items: center; justify-content: center;
+  gap: 3px;
+  height: clamp(38px, 6.5vmin, 70px);
 }
-.recording-glow { animation: mic-recording 1.3s ease-in-out infinite; }
+.wave .bar {
+  width: 3px;
+  background: linear-gradient(to top, var(--accent-1), var(--accent-2));
+  border-radius: 3px;
+  transition: height 0.08s ease-out;
+}
+.density-compact .wave { height: 32px; gap: 2px; }
+.density-compact .wave .bar { width: 2.5px; border-radius: 2px; }
 
-/* ===== Orb ring pulse ===== */
-@keyframes orb-pulse {
-  0%,100% { transform: scale(1);    opacity: 0.12; }
-  50%     { transform: scale(1.05); opacity: 0.06; }
+/* Sidebar nav item */
+.nav-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  position: relative;
 }
-.orb-ring { animation: orb-pulse 4.5s ease-in-out infinite; pointer-events: none; }
-
-/* ===== Streaming cursor ===== */
-@keyframes blink-cursor {
-  0%,45% { opacity: 1; }
-  55%,100% { opacity: 0; }
+.nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(var(--accent-1-rgb),0.18), rgba(var(--accent-2-rgb),0.12));
+  color: white;
 }
-@keyframes shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-.streaming-cursor::after {
+.nav-item.active::before {
   content: '';
-  display: inline-block;
-  width: 2px; height: 1.1em;
-  vertical-align: text-bottom;
-  background: var(--accent);
-  border-radius: 1px;
-  margin-left: 3px;
-  animation: blink-cursor 1s ease-in-out infinite;
-  box-shadow: 0 0 8px var(--accent-glow);
+  position: absolute; left: -10px; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 2px;
+  background: linear-gradient(to bottom, var(--accent-1), var(--accent-2));
 }
 
-/* ===== Tooltip ===== */
-@keyframes tooltip-in {
-  from { opacity: 0; transform: translateX(-5px) scale(0.96); }
-  to   { opacity: 1; transform: translateX(0) scale(1); }
+/* Cards / list items */
+.card {
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.02);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.tooltip-animate { animation: tooltip-in 0.14s cubic-bezier(0.16, 1, 0.3, 1); }
+.card:hover { background: rgba(255,255,255,0.04); border-color: var(--line-strong); }
 
-/* ===== Transitions ===== */
-.transition-smooth { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-.transition-fast   { transition: all 0.12s ease; }
-
-/* ===== Spinner ===== */
-@keyframes spin-smooth {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 2px 8px;
+  font-size: 0.7rem; font-weight: 600;
+  border-radius: 999px;
+  background: rgba(var(--accent-1-rgb), 0.15);
+  color: var(--accent-1-light);
+  border: 1px solid rgba(var(--accent-1-rgb), 0.3);
 }
-.spin-smooth { animation: spin-smooth 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.badge-green { background: rgba(var(--success-rgb),0.15); color: #6ee7b7; border-color: rgba(var(--success-rgb),0.3); }
+.badge-amber { background: rgba(245,158,11,0.15); color: #fcd34d; border-color: rgba(245,158,11,0.3); }
+.badge-red   { background: rgba(var(--danger-rgb),0.15); color: #fda4af; border-color: rgba(var(--danger-rgb),0.3); }
 
-/* ===== Input range ===== */
-input[type="range"] { accent-color: var(--accent); }
-
-/* ===== Text utilities ===== */
-.label-xs {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.label-accent {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
-  opacity: 0.85;
-}
-.text-gradient {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+/* Text helpers */
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent-1-light), var(--accent-2), var(--accent-3));
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: transparent;
 }
+.accent-text { color: var(--accent-1); }
 
-/* ===== Separator ===== */
-.separator {
-  width: 1px;
-  background: var(--border);
-  align-self: stretch;
+/* Fade / slide entrances */
+.fade-in { animation: fadeIn 0.4s ease both; }
+.slide-up { animation: slideUp 0.4s ease both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Switch */
+.switch {
+  position: relative;
+  width: 40px; height: 22px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s;
   flex-shrink: 0;
 }
-
-/* ===== Orb glow background ===== */
-.orb-glow-bg {
+.switch::after {
+  content: '';
   position: absolute;
-  width: 300px; height: 300px;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  background: white;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center,
-    rgba(139,120,255,0.08) 0%,
-    rgba(139,120,255,0.04) 35%,
-    transparent 70%);
+  transition: left 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+.switch.on { background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); box-shadow: 0 0 12px rgba(var(--accent-1-rgb), calc(0.2 + 0.4 * var(--glow-intensity))); }
+.switch.on::after { left: 20px; }
+/* Small variant used inline inside chips */
+.switch.\!w-9 { width: 36px; }
+.switch.\!h-5 { height: 20px; }
+.switch.\!w-9.on::after { left: 18px; width: 16px; height: 16px; }
+.switch.\!h-5::after { width: 16px; height: 16px; }
+
+/* =========================================================
+   Range sliders (theme effect controls)
+   -----------------------------------------------------------
+   The fill is a 2-stop linear gradient whose stop position is
+   read from the inline CSS variable `--pct`, set by React at
+   the value's actual percentage (0%..100%). No calc() on
+   unregistered custom properties, no transition on the
+   background (which would lag behind the thumb during drag).
+   ========================================================= */
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent-1) 0,
+    var(--accent-1) var(--pct, 50%),
+    rgba(255,255,255,0.08) var(--pct, 50%),
+    rgba(255,255,255,0.08) 100%
+  );
+  outline: none;
+  cursor: pointer;
+  /* Instant repaint — no track transition, so fill matches the thumb exactly. */
+  transition: none;
+  touch-action: none;
+}
+.range-input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--accent-1-rgb), 0.25);
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-1-light), var(--accent-1));
+  box-shadow:
+    0 0 10px rgba(var(--accent-1-rgb), calc(0.3 + 0.3 * var(--glow-intensity))),
+    inset 0 1px 2px rgba(255,255,255,0.4);
+  cursor: grab;
+  /* Only transform is animated — cheap, GPU-only. */
+  transition: transform 0.12s ease;
+  will-change: transform;
+  border: none;
+}
+.range-input::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.range-input::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.05); }
+.range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-1-light), var(--accent-1));
+  box-shadow: 0 0 10px rgba(var(--accent-1-rgb), 0.4);
+  cursor: grab;
+  transition: transform 0.12s ease;
+  will-change: transform;
+}
+.range-input::-moz-range-thumb:hover { transform: scale(1.15); }
+.range-input::-moz-range-thumb:active { cursor: grabbing; transform: scale(1.05); }
+/* Firefox dedicated track (avoids the outline around the thumb) */
+.range-input::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+/* Theme preview cards */
+.theme-card {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+.theme-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5);
+}
+
+/* =========================================================
+   Segmented control (Density toggle)
+   ========================================================= */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--line-strong);
+  gap: 2px;
+}
+.seg > button {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 7px;
+  font-size: 0.75rem; font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.seg > button:hover { color: var(--text); }
+.seg > button.active {
+  background: linear-gradient(135deg, rgba(var(--accent-1-rgb),0.35), rgba(var(--accent-2-rgb),0.25));
+  color: white;
+  box-shadow: 0 2px 10px rgba(var(--accent-1-rgb), calc(0.15 + 0.25 * var(--glow-intensity)));
+}
+
+/* Mini record button (compact floating view) */
+.record-mini {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, var(--accent-1-light), var(--accent-1) 55%, var(--accent-1-dim));
+  box-shadow: 0 8px 24px -6px rgba(var(--accent-1-rgb), calc(0.35 + 0.35 * var(--glow-intensity))), inset 0 1px 8px rgba(255,255,255,0.2);
+  border: none; color: var(--on-accent);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: transform 0.12s ease;
+}
+.record-mini:hover { transform: scale(1.06); }
+.record-mini:active { transform: scale(0.94); }
+.record-mini.recording {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #fda4af, #f43f5e 55%, #9f1239);
+  box-shadow: 0 8px 24px -6px rgba(244,63,94,0.65), inset 0 1px 8px rgba(255,255,255,0.22);
+  animation: pulse-red 1.4s ease-in-out infinite;
+}
+.record-mini.processing {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #67e8f9, #06b6d4 55%, #155e75);
+  box-shadow: 0 8px 24px -6px rgba(34,211,238,0.55);
+}
+
+/* =========================================================
+   Pill widget (compact density)
+   Window is 176x52, transparent, frameless. We render a glass pill
+   centered inside and let the user drag from anywhere on it.
+   ========================================================= */
+.density-compact {
+  width: 100%;
+  height: 100%;
+  /* NOT draggable — the transparent gap around the pill must NOT catch
+     pointer events, otherwise the user sees a rectangular "phantom"
+     window around the tiny idle pill and can grab/drag it from there. */
+  cursor: default;
+}
+
+.pill-root {
+  width: 100%;
+  height: 100%;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Hover zone only — React listens for mouseenter/leave here so the
+     pill can still expand even if the cursor is a few px away from the
+     idle dot. No drag here either (see `.density-compact` above). */
+}
+
+.pill {
+  /* Expanded default — overridden by .pill-root.is-idle below. */
+  width: 100%;
+  height: 44px;
+  padding: 3px 6px 3px 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
+  backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 0.5px rgba(var(--accent-1-rgb), calc(0.10 + 0.15 * var(--glow-intensity))),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* All animatable properties for the Superwhisper-style grow / shrink. */
+  transition:
+    width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+  position: relative;
+  /* Promote to its own compositor layer for smooth resizing. */
+  will-change: width, height;
+  /* The pill is THE draggable surface. Its shape (capsule via
+     border-radius: 999px) and size (idle: 52x20, expanded: full) define
+     exactly where the user can grab the window — no phantom rectangle
+     around it. */
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+.pill:active { cursor: grabbing; }
+
+/* Two-face layout: the idle dot and the full UI share the same pill, stacked
+   via absolute positioning. Opacity crossfade while .pill itself resizes. */
+.pill-idle-face,
+.pill-full {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.18s ease;
+}
+.pill-idle-face {
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
   pointer-events: none;
-  animation: orb-pulse 5s ease-in-out infinite;
+  -webkit-app-region: no-drag;
+}
+.pill-idle-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
+}
+.pill-full {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 4px;
+  opacity: 1;
+  transition: opacity 0.18s ease;
 }
 
-/* ===== Status dot ===== */
-@keyframes status-pulse {
-  0%,100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
-  50%     { box-shadow: 0 0 0 3px transparent; opacity: 0.8; }
+/* Collapsed state — tiny dark oval centred in the window (Superwhisper). */
+.pill-root.is-idle .pill {
+  width: 52px;
+  height: 20px;
+  padding: 0;
+  background: rgba(10, 10, 12, 0.88);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 3px 10px -2px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* Don't stack the aurora/glow when at rest — we want it very discreet. */
+  animation: none !important;
 }
-.status-dot-recording { animation: status-pulse 1.3s ease-in-out infinite; }
-
-/* ===== Compact Overlay — Floating Orb ===== */
-.compact-root {
-  animation: compact-mount 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+.pill-root.is-idle .pill-full {
+  opacity: 0;
+  pointer-events: none;
 }
-@keyframes compact-mount {
-  0%   { opacity: 0; transform: scale(0.6); filter: blur(10px); }
-  60%  { opacity: 1;                         filter: blur(0px);  }
-  100% { opacity: 1; transform: scale(1);    filter: blur(0px);  }
+.pill-root.is-idle .pill-idle-face {
+  opacity: 1;
+  pointer-events: auto;
 }
-@keyframes compact-breathe {
-  0%,100% { transform: scale(1);     opacity: 0.9;  }
-  50%     { transform: scale(1.06);  opacity: 1;    }
-}
-@keyframes compact-halo {
-  0%,100% { opacity: 0.6;  transform: scale(1);    }
-  50%     { opacity: 0.9;  transform: scale(1.08); }
-}
-@keyframes compact-ripple-idle {
-  0%   { transform: scale(0.7); opacity: 0.45; }
-  70%  {                         opacity: 0.08; }
-  100% { transform: scale(1.6); opacity: 0;    }
-}
-@keyframes compact-ripple-rec {
-  0%   { transform: scale(0.7); opacity: 0.75; }
-  70%  {                         opacity: 0.15; }
-  100% { transform: scale(1.7); opacity: 0;    }
-}
-@keyframes compact-orbit {
-  from { transform: rotate(0deg);   }
-  to   { transform: rotate(360deg); }
+.pill-root.is-idle .pill-idle-face:hover .pill-idle-dot {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
 }
 
-/* ===== Result Bubble ===== */
-.result-bubble {
-  animation: bubbleIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+/* Expanded state — explicit just to pair with is-idle for clarity. */
+.pill-root.is-expanded .pill-idle-face {
+  opacity: 0;
+  pointer-events: none;
 }
-@keyframes bubbleIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.92); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.pill-root.is-expanded .pill-full {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* State-driven glow */
+.state-recording .pill {
+  border-color: rgba(244, 63, 94, 0.35);
+  box-shadow:
+    0 0 0 0.5px rgba(244, 63, 94, 0.22),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(244, 63, 94, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: pill-pulse-red 1.6s ease-in-out infinite;
+}
+.state-processing .pill {
+  border-color: rgba(34, 211, 238, 0.3);
+  box-shadow:
+    0 0 0 0.5px rgba(34, 211, 238, 0.22),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 0 16px rgba(34, 211, 238, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.state-error .pill {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow:
+    0 0 0 0.5px rgba(245, 158, 11, 0.22),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 0 16px rgba(245, 158, 11, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.done-flash .pill {
+  border-color: rgba(16, 185, 129, 0.38);
+  box-shadow:
+    0 0 0 0.5px rgba(16, 185, 129, 0.25),
+    0 6px 22px -6px rgba(0, 0, 0, 0.55),
+    0 0 16px rgba(16, 185, 129, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+@keyframes pill-pulse-red {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0.5px rgba(244, 63, 94, 0.22),
+      0 6px 22px -6px rgba(0, 0, 0, 0.55),
+      0 0 18px rgba(244, 63, 94, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 0 0.5px rgba(244, 63, 94, 0.3),
+      0 6px 22px -6px rgba(0, 0, 0, 0.55),
+      0 0 26px rgba(244, 63, 94, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* Mic button — circular, state-coloured, click target */
+.pill-mic {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--on-accent);
+  background: radial-gradient(circle at 30% 28%, var(--accent-1-light), var(--accent-1) 55%, var(--accent-1-dim));
+  box-shadow:
+    0 2px 6px rgba(var(--accent-1-rgb), calc(0.25 + 0.35 * var(--glow-intensity))),
+    inset 0 1px 4px rgba(255, 255, 255, 0.22),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.pill-mic:hover { transform: scale(1.05); }
+.pill-mic:active { transform: scale(0.94); }
+.pill-mic:disabled { cursor: progress; opacity: 0.9; }
+.pill-mic:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(var(--accent-1-rgb), 0.55),
+    0 2px 6px rgba(var(--accent-1-rgb), 0.42);
+}
+
+.state-recording .pill-mic {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #fda4af, #f43f5e 55%, #9f1239);
+  box-shadow:
+    0 2px 6px rgba(244, 63, 94, 0.55),
+    inset 0 1px 4px rgba(255, 255, 255, 0.22);
+}
+.state-processing .pill-mic {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #67e8f9, #06b6d4 55%, #155e75);
+  box-shadow:
+    0 2px 6px rgba(34, 211, 238, 0.5),
+    inset 0 1px 4px rgba(255, 255, 255, 0.22);
+}
+.state-error .pill-mic {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #fcd34d, #f59e0b 55%, #b45309);
+  box-shadow:
+    0 2px 6px rgba(245, 158, 11, 0.5),
+    inset 0 1px 4px rgba(255, 255, 255, 0.22);
+}
+.done-flash .pill-mic {
+  color: #ffffff;
+  background: radial-gradient(circle at 30% 28%, #6ee7b7, #10b981 55%, #065f46);
+  box-shadow:
+    0 2px 6px rgba(16, 185, 129, 0.5),
+    inset 0 1px 4px rgba(255, 255, 255, 0.22);
+}
+
+/* Body: status label or live waveform */
+.pill-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+.pill-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pill-label-cyan   { color: #67e8f9; }
+.pill-label-amber  { color: #fcd34d; }
+.pill-label-green  { color: #6ee7b7; }
+.pill-label-faded  { color: rgba(255, 255, 255, 0.48); font-style: italic; }
+
+/* Mini waveform inside the pill */
+.pill-wave {
+  width: 100%;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.pill-wave-bar {
+  display: block;
+  width: 2px;
+  min-height: 2px;
+  background: linear-gradient(to top, rgba(251, 113, 133, 0.85), #f43f5e);
+  border-radius: 2px;
+  transition: height 0.08s ease-out;
+}
+
+/* Expand (maximise) button on the right */
+.pill-expand {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.2s ease;
+  opacity: 0.55;
+}
+.pill:hover .pill-expand { opacity: 1; }
+.pill-expand:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
 }

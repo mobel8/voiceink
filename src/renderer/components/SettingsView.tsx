@@ -1,570 +1,337 @@
-import React, { useState, useEffect } from 'react';
-import { Save, RotateCcw, Download, Check, Loader2, Eye, EyeOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import type { AppSettings, STTModel, STTProvider, LLMProvider, PrivacyMode } from '@shared/types';
-
-const STT_MODELS: { value: STTModel; label: string; size: string }[] = [
-  { value: 'tiny',   label: 'Tiny',   size: '75 MB'  },
-  { value: 'base',   label: 'Base',   size: '142 MB' },
-  { value: 'small',  label: 'Small',  size: '466 MB' },
-  { value: 'medium', label: 'Medium', size: '1.5 GB' },
-  { value: 'large',  label: 'Large',  size: '3.1 GB' },
-];
-
-const STT_PROVIDERS: { value: STTProvider; label: string; desc: string }[] = [
-  { value: 'groq',   label: 'Groq',    desc: 'Whisper large-v3 — ultra rapide, gratuit'   },
-  { value: 'local',  label: 'Local',   desc: 'Whisper.cpp — 100% offline, CPU/GPU'         },
-  { value: 'openai', label: 'OpenAI',  desc: 'Whisper API — haute qualité, cloud'          },
-  { value: 'glm',    label: 'GLM',     desc: 'Zhipu AI — utilise la clé LLM'              },
-];
-
-const LLM_PROVIDERS: { value: LLMProvider; label: string; desc: string }[] = [
-  { value: 'none',      label: 'Aucun',      desc: 'Texte brut sans post-traitement'          },
-  { value: 'ollama',    label: 'Ollama',      desc: 'LLM local — llama, mistral, gemma…'       },
-  { value: 'openai',    label: 'OpenAI',      desc: 'GPT-4o, GPT-4-turbo…'                    },
-  { value: 'anthropic', label: 'Anthropic',   desc: 'Claude Sonnet, Haiku…'                   },
-  { value: 'glm',       label: 'GLM Flash',   desc: 'Zhipu AI — rapide et économique'         },
-];
-
-type SettingsTab = 'audio' | 'stt' | 'llm' | 'shortcuts' | 'privacy' | 'ui';
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'audio',    label: 'Audio'         },
-  { id: 'stt',      label: 'STT'           },
-  { id: 'llm',      label: 'LLM'           },
-  { id: 'shortcuts',label: 'Raccourcis'    },
-  { id: 'privacy',  label: 'Confidentialité'},
-  { id: 'ui',       label: 'Interface'     },
-];
-
-/* ─── Shared field wrapper ─── */
-const Field = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
-  <div>
-    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 5 }}>
-      {label}
-    </label>
-    {children}
-    {hint && <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</p>}
-  </div>
-);
-
-/* ─── Toggle ─── */
-function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button
-      role="switch" aria-checked={value} aria-label={label}
-      onClick={() => onChange(!value)}
-      style={{
-        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-        background: value ? 'var(--accent)' : 'var(--bg-tertiary)',
-        transition: 'background 0.2s ease', position: 'relative', flexShrink: 0,
-        outline: 'none',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute', top: 2, left: value ? 18 : 2,
-          width: 16, height: 16, borderRadius: '50%',
-          background: 'white', transition: 'left 0.2s ease',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        }}
-      />
-    </button>
-  );
-}
-
-/* ─── Password input ─── */
-function ApiKeyInput({
-  value, onChange, placeholder, keyId, showKeys, toggleKey,
-}: {
-  value: string; onChange: (v: string) => void;
-  placeholder: string; keyId: string;
-  showKeys: Record<string, boolean>;
-  toggleKey: (k: string) => void;
-}) {
-  return (
-    <div style={{ position: 'relative' }}>
-      <input
-        type={showKeys[keyId] ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="input-base"
-        style={{ paddingRight: 36 }}
-      />
-      <button
-        onClick={() => toggleKey(keyId)}
-        style={{
-          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
-        }}
-      >
-        {showKeys[keyId] ? <EyeOff size={13} /> : <Eye size={13} />}
-      </button>
-    </div>
-  );
-}
-
-/* ─── Section header ─── */
-const SectionHeader = ({ children }: { children: React.ReactNode }) => (
-  <p style={{
-    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-    textTransform: 'uppercase', color: 'var(--text-muted)',
-    marginBottom: 10, marginTop: 4,
-  }}>
-    {children}
-  </p>
-);
-
-/* ─── Row with label + control ─── */
-const Row = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-    <div>
-      <p style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>{label}</p>
-      {desc && <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{desc}</p>}
-    </div>
-    {children}
-  </div>
-);
+import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS } from '../lib/constants';
+import { Settings } from '../../shared/types';
+import { AppearanceSection } from './AppearanceSection';
+import { ReplacementsSection } from './ReplacementsSection';
 
 export function SettingsView() {
-  const { settings, setSettings, modelDownloadProgress, addToast, theme, setTheme } = useStore();
-  const [local, setLocal]      = useState<AppSettings | null>(null);
-  const [downloading, setDl]   = useState(false);
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [tab, setTab]          = useState<SettingsTab>('audio');
+  const { settings, updateSettings } = useStore();
+  const [showKey, setShowKey] = useState(false);
+  const [showLlmKey, setShowLlmKey] = useState(false);
+  const [savedPulse, setSavedPulse] = useState(false);
 
-  useEffect(() => {
-    if (settings) setLocal({ ...settings });
-  }, [settings]);
+  const api = (window as any).voiceink;
 
-  if (!local) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Loader2 size={22} style={{ color: 'var(--accent)' }} className="spin-smooth" />
-      </div>
-    );
-  }
-
-  const set = (section: string, field: string, value: any) =>
-    setLocal((prev) => prev ? { ...prev, [section]: { ...(prev as any)[section], [field]: value } } : prev);
-
-  const handleSave = async () => {
-    if (local && window.voiceink) {
-      const updated = await window.voiceink.setSettings(local);
-      setSettings(updated);
-      addToast({ type: 'success', message: 'Paramètres sauvegardés' });
-    }
+  const save = async (patch: Partial<Settings>) => {
+    await updateSettings(patch);
+    setSavedPulse(true);
+    setTimeout(() => setSavedPulse(false), 1200);
   };
 
-  const handleReset = async () => {
-    if (window.voiceink) {
-      const d = await window.voiceink.resetSettings();
-      setLocal(d); setSettings(d);
-      addToast({ type: 'info', message: 'Paramètres réinitialisés' });
-    }
+  const setDensity = async (next: 'comfortable' | 'compact') => {
+    if (settings.density === next) return;
+    // Don't save via store first — the main process will persist the density
+    // and recreate the window (required for transparency toggling). Saving
+    // locally before recreation would cause a visible UI flash in the
+    // current window.
+    await api?.windowResizeForDensity?.(next);
   };
 
-  const handleDownload = async (model: STTModel) => {
-    if (!window.voiceink) return;
-    setDl(true);
-    try {
-      await window.voiceink.downloadModel(model);
-      addToast({ type: 'success', message: `Modèle ${model} téléchargé` });
-    } catch {
-      addToast({ type: 'error', message: 'Erreur de téléchargement' });
-    }
-    setDl(false);
+  const setAlwaysOnTop = async (next: boolean) => {
+    await save({ alwaysOnTop: next });
+    await api?.windowSetAlwaysOnTop?.(next);
   };
 
-  const toggleKey = (k: string) => setShowKeys((p) => ({ ...p, [k]: !p[k] }));
+  const setAutoStart = async (next: boolean) => {
+    // Round-trips to main so it can also call app.setLoginItemSettings().
+    const res = await api?.setAutoStart?.(next);
+    if (res?.ok) {
+      await updateSettings({ autoStart: next });
+      setSavedPulse(true);
+      setTimeout(() => setSavedPulse(false), 1200);
+    } else if (res?.error) {
+      alert('Impossible d\'activer le démarrage automatique : ' + res.error);
+    }
+  };
 
   return (
-    <div
-      className="flex flex-col h-full animate-fade-in"
-      style={{ background: 'var(--gradient-surface)' }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 16px 10px',
-          borderBottom: '1px solid var(--border-subtle)',
-          flexShrink: 0,
-        }}
-      >
-        <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-          Paramètres
-        </h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={handleReset} className="btn-ghost">
-            <RotateCcw size={11} /> Réinitialiser
-          </button>
-          <button onClick={handleSave} className="btn-accent">
-            <Save size={11} /> Sauvegarder
-          </button>
+    <div className="px-8 py-8 max-w-3xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight"><span className="gradient-text">Paramètres</span></h1>
+          <p className="text-white/50 text-sm mt-1">Configurez votre moteur et votre expérience.</p>
+        </div>
+        {savedPulse && (
+          <span className="badge badge-green fade-in"><Check size={10} /> Sauvegardé</span>
+        )}
+      </div>
+
+      {/* Appearance (theme + effects) */}
+      <AppearanceSection />
+
+      {/* Interface */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Layout size={16} className="accent-text" />
+          <h2 className="font-semibold text-lg">Interface</h2>
+        </div>
+
+        <div>
+          <div className="label mb-2">Densité</div>
+          <div className="seg">
+            <button
+              className={settings.density === 'comfortable' ? 'active' : ''}
+              onClick={() => setDensity('comfortable')}
+            >
+              Confortable
+            </button>
+            <button
+              className={settings.density === 'compact' ? 'active' : ''}
+              onClick={() => setDensity('compact')}
+            >
+              Compact / minimaliste
+            </button>
+          </div>
+          <p className="text-[11px] text-white/40 mt-2">
+            Le mode compact transforme l'app en une petite pilule flottante
+            (176×52 px) transparente, toujours au premier plan et déplaçable
+            partout à l'écran — idéale pour dicter en surimpression.
+          </p>
+        </div>
+
+        <ToggleRow
+          label="Toujours au premier plan"
+          desc="Garde la fenêtre VoiceInk visible au-dessus de vos autres applications."
+          icon={<Pin size={14} />}
+          value={settings.alwaysOnTop}
+          onChange={setAlwaysOnTop}
+        />
+      </section>
+
+      {/* Replacements / custom dictionary */}
+      <ReplacementsSection />
+
+      {/* Translation */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Languages size={16} className="text-fuchsia-300" />
+          <h2 className="font-semibold text-lg">Traduction automatique</h2>
+        </div>
+        <p className="text-white/50 text-sm">
+          Traduisez votre dictée à la volée vers la langue de votre choix.
+          La traduction s'applique après la transcription et avant l'injection
+          dans l'application cible.
+        </p>
+
+        <div>
+          <div className="label mb-2">Traduire vers</div>
+          <select
+            className="select"
+            value={settings.translateTo}
+            onChange={(e) => save({ translateTo: e.target.value })}
+          >
+            {TRANSLATE_TARGETS.map((t) => (
+              <option key={t.code || 'none'} value={t.code}>
+                {t.code ? `→ ${t.native}` : 'Aucune (garder la langue d\'origine)'}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-white/40 mt-2">
+            Utilise le modèle Groq llama-3.3-70b (≈300-600 ms). Nécessite la clé Groq.
+          </p>
+        </div>
+
+        {settings.translateTo && (
+          <div className="slide-up">
+            <div className="label mb-2">Modèle de traduction</div>
+            <select
+              className="select"
+              value={settings.translateModel}
+              onChange={(e) => save({ translateModel: e.target.value })}
+            >
+              <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (recommandé)</option>
+              <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (plus rapide)</option>
+              <option value="llama-3.3-70b-specdec">llama-3.3-70b-specdec (speculative decoding)</option>
+            </select>
+          </div>
+        )}
+      </section>
+
+      {/* Groq API */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-lg">Moteur de transcription</h2>
+          <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
+            Obtenir une clé <ExternalLink size={12} />
+          </a>
+        </div>
+
+        <div>
+          <div className="label mb-2">Clé API Groq</div>
+          <div className="flex gap-2">
+            <input
+              type={showKey ? 'text' : 'password'}
+              className="input font-mono"
+              placeholder="gsk_..."
+              value={settings.groqApiKey}
+              onChange={(e) => save({ groqApiKey: e.target.value.trim() })}
+            />
+            <button className="btn btn-ghost" onClick={() => setShowKey(!showKey)}>
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-[11px] text-white/40 mt-2">Stockée localement. Jamais envoyée ailleurs que vers l'API Groq.</p>
+        </div>
+
+        <div>
+          <div className="label mb-2">Modèle Whisper</div>
+          <select className="select" value={settings.sttModel} onChange={(e) => save({ sttModel: e.target.value })}>
+            {GROQ_STT_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <div className="label mb-2">Langue par défaut</div>
+          <select className="select" value={settings.language} onChange={(e) => save({ language: e.target.value })}>
+            {SUPPORTED_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+        </div>
+      </section>
+
+      {/* Workflow */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <h2 className="font-semibold text-lg">Workflow</h2>
+        <ToggleRow
+          label="Copie automatique"
+          desc="Copier la transcription dans le presse-papier."
+          value={settings.autoCopy}
+          onChange={(v) => save({ autoCopy: v })}
+        />
+        <ToggleRow
+          label="Injection automatique"
+          desc="Coller automatiquement dans l'application active (Ctrl+V)."
+          value={settings.autoInject}
+          onChange={(v) => save({ autoInject: v })}
+        />
+      </section>
+
+      {/* LLM */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-lg">Post-traitement LLM</h2>
+          <Switch value={settings.llmEnabled} onChange={(v) => save({ llmEnabled: v })} />
+        </div>
+        <p className="text-white/50 text-sm">Nettoie / reformule automatiquement selon le mode choisi. Désactivé en mode "Brut".</p>
+
+        {settings.llmEnabled && (
+          <div className="space-y-4 slide-up">
+            <div>
+              <div className="label mb-2">Fournisseur</div>
+              <select className="select" value={settings.llmProvider} onChange={(e) => save({ llmProvider: e.target.value as Settings['llmProvider'] })}>
+                <option value="groq">Groq (rapide, utilise la même clé)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="ollama">Ollama (local)</option>
+              </select>
+            </div>
+            <div>
+              <div className="label mb-2">Modèle</div>
+              <input className="input font-mono" value={settings.llmModel} onChange={(e) => save({ llmModel: e.target.value })} />
+            </div>
+            {(settings.llmProvider === 'openai' || settings.llmProvider === 'anthropic') && (
+              <div>
+                <div className="label mb-2">Clé API</div>
+                <div className="flex gap-2">
+                  <input
+                    type={showLlmKey ? 'text' : 'password'}
+                    className="input font-mono"
+                    value={settings.llmApiKey}
+                    onChange={(e) => save({ llmApiKey: e.target.value.trim() })}
+                  />
+                  <button className="btn btn-ghost" onClick={() => setShowLlmKey(!showLlmKey)}>
+                    {showLlmKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Shortcuts */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Keyboard size={16} className="accent-text" />
+          <h2 className="font-semibold text-lg">Raccourcis globaux</h2>
+        </div>
+        <div>
+          <div className="label mb-2">Démarrer / Arrêter (toggle)</div>
+          <input className="input font-mono" value={settings.shortcutToggle} onChange={(e) => save({ shortcutToggle: e.target.value })} />
+          <p className="text-[11px] text-white/40 mt-1">Format Electron, ex: <code>CommandOrControl+Shift+Space</code>. Nécessite un redémarrage de l'app.</p>
+        </div>
+
+        <div className="pt-2 border-t border-white/5">
+          <ToggleRow
+            label="Push-to-Talk"
+            desc="Maintenir un raccourci pour parler, relâcher pour arrêter. Plus rapide que le toggle pour de courtes dictées."
+            icon={<Keyboard size={14} />}
+            value={!!settings.pttEnabled}
+            onChange={(v) => save({ pttEnabled: v })}
+          />
+          {settings.pttEnabled && (
+            <div className="mt-3 slide-up">
+              <div className="label mb-2">Raccourci Push-to-Talk</div>
+              <input className="input font-mono" value={settings.shortcutPTT} onChange={(e) => save({ shortcutPTT: e.target.value })} />
+              <p className="text-[11px] text-white/40 mt-1">
+                Le mode Push-to-Talk démarre l'enregistrement à la première pression et le stoppe à la suivante.
+                Les raccourcis globaux Electron ne reçoivent pas les événements de relâchement sous Windows.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* System */}
+      <section className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Power size={16} className="accent-text" />
+          <h2 className="font-semibold text-lg">Système</h2>
+        </div>
+        <ToggleRow
+          label="Lancer VoiceInk au démarrage de Windows"
+          desc="L'app se lancera automatiquement à chaque ouverture de session."
+          icon={<Power size={14} />}
+          value={!!settings.autoStart}
+          onChange={setAutoStart}
+        />
+        <ToggleRow
+          label="Démarrer en arrière-plan"
+          desc="Au lancement, ne pas afficher la fenêtre principale — rester dans le tray / en pilule."
+          icon={<Layout size={14} />}
+          value={!!settings.startMinimized}
+          onChange={(v) => save({ startMinimized: v })}
+        />
+        <ToggleRow
+          label="Sons de notification"
+          desc="Joue un bip subtil au début et à la fin de l'enregistrement."
+          icon={<Volume2 size={14} />}
+          value={!!settings.soundsEnabled}
+          onChange={(v) => save({ soundsEnabled: v })}
+        />
+      </section>
+    </div>
+  );
+}
+
+function ToggleRow({ label, desc, value, onChange, icon }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <div className="flex items-start gap-2 min-w-0">
+        {icon && <span className="text-white/60 mt-0.5">{icon}</span>}
+        <div className="min-w-0">
+          <div className="font-medium">{label}</div>
+          <div className="text-white/50 text-xs">{desc}</div>
         </div>
       </div>
-
-      {/* Tabs */}
-      <div
-        className="scrollbar-hide"
-        style={{
-          display: 'flex', gap: 2, padding: '0 12px',
-          borderBottom: '1px solid var(--border-subtle)',
-          overflowX: 'auto', flexShrink: 0,
-        }}
-        role="tablist"
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              padding: '8px 10px',
-              fontSize: 11, fontWeight: tab === t.id ? 600 : 500,
-              whiteSpace: 'nowrap',
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-muted)',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
-              cursor: 'pointer', transition: 'all 0.15s ease',
-              marginBottom: -1,
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div
-        style={{ flex: 1, overflowY: 'auto', padding: '16px' }}
-        role="tabpanel"
-      >
-
-        {/* ── Audio ── */}
-        {tab === 'audio' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <SectionHeader>Capture</SectionHeader>
-            <Field label="Sensibilité du microphone">
-              <input
-                type="range" min="0" max="1" step="0.05"
-                value={local.audio.sensitivity}
-                onChange={(e) => set('audio', 'sensitivity', parseFloat(e.target.value))}
-                style={{ width: '100%' }}
-              />
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                {Math.round(local.audio.sensitivity * 100)}%
-              </span>
-            </Field>
-            <SectionHeader>Traitement</SectionHeader>
-            <Row label="Réduction de bruit" desc="Filtre le bruit ambiant">
-              <Toggle value={local.audio.noiseReduction} onChange={(v) => set('audio', 'noiseReduction', v)} label="Réduction de bruit" />
-            </Row>
-            <Row label="Gain automatique" desc="Ajuste le volume automatiquement">
-              <Toggle value={local.audio.autoGain} onChange={(v) => set('audio', 'autoGain', v)} label="Gain automatique" />
-            </Row>
-          </div>
-        )}
-
-        {/* ── STT ── */}
-        {tab === 'stt' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Fournisseur STT</SectionHeader>
-
-            {/* Provider cards */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {STT_PROVIDERS.map((p) => {
-                const active = local.stt.provider === p.value;
-                return (
-                  <div
-                    key={p.value}
-                    onClick={() => set('stt', 'provider', p.value)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                      border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
-                      background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                        border: `2px solid ${active ? 'var(--accent)' : 'var(--text-muted)'}`,
-                        background: active ? 'var(--accent)' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >
-                      {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'white' }} />}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{p.label}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{p.desc}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Groq key */}
-            {local.stt.provider === 'groq' && (
-              <Field label="Clé API Groq" hint="Gratuite sur console.groq.com">
-                <ApiKeyInput
-                  value={local.stt.groqApiKey || ''} onChange={(v) => set('stt', 'groqApiKey', v)}
-                  placeholder="gsk_..." keyId="groq" showKeys={showKeys} toggleKey={toggleKey}
-                />
-              </Field>
-            )}
-
-            {/* OpenAI STT key */}
-            {local.stt.provider === 'openai' && (
-              <Field label="Clé API OpenAI">
-                <ApiKeyInput
-                  value={local.stt.openaiApiKey || ''} onChange={(v) => set('stt', 'openaiApiKey', v)}
-                  placeholder="sk-..." keyId="stt_openai" showKeys={showKeys} toggleKey={toggleKey}
-                />
-              </Field>
-            )}
-
-            {/* Local models */}
-            {local.stt.provider === 'local' && (
-              <>
-                <SectionHeader>Modèle Whisper</SectionHeader>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {STT_MODELS.map((m) => {
-                    const active = local.stt.localModel === m.value;
-                    return (
-                      <div
-                        key={m.value}
-                        onClick={() => set('stt', 'localModel', m.value)}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
-                          border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
-                          background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {active && <Check size={11} style={{ color: 'var(--accent)' }} />}
-                          <span style={{ fontSize: 12, fontWeight: 500, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{m.label}</span>
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{m.size}</span>
-                        </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDownload(m.value); }}
-                          disabled={downloading}
-                          className="btn-ghost"
-                          style={{ padding: '3px 8px', fontSize: 10 }}
-                        >
-                          {downloading
-                            ? <><Loader2 size={9} className="spin-smooth" />{modelDownloadProgress > 0 ? `${modelDownloadProgress}%` : '…'}</>
-                            : <><Download size={9} />Télécharger</>
-                          }
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Row label="Accélération GPU">
-                  <Toggle value={local.stt.gpuEnabled} onChange={(v) => set('stt', 'gpuEnabled', v)} label="GPU" />
-                </Row>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── LLM ── */}
-        {tab === 'llm' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Fournisseur LLM</SectionHeader>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {LLM_PROVIDERS.map((p) => {
-                const active = local.llm.provider === p.value;
-                return (
-                  <div
-                    key={p.value}
-                    onClick={() => set('llm', 'provider', p.value)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
-                      border: `1px solid ${active ? 'var(--pill-active-border)' : 'var(--border)'}`,
-                      background: active ? 'var(--accent-subtle)' : 'var(--bg-input)',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <div style={{
-                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                      border: `2px solid ${active ? 'var(--accent)' : 'var(--text-muted)'}`,
-                      background: active ? 'var(--accent)' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'white' }} />}
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{p.label}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{p.desc}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {local.llm.provider === 'ollama' && (
-              <>
-                <Field label="URL Ollama">
-                  <input type="text" className="input-base" value={local.llm.ollamaUrl} onChange={(e) => set('llm', 'ollamaUrl', e.target.value)} />
-                </Field>
-                <Field label="Modèle Ollama">
-                  <input type="text" className="input-base" value={local.llm.ollamaModel} onChange={(e) => set('llm', 'ollamaModel', e.target.value)} placeholder="mistral, llama3, gemma2…" />
-                </Field>
-              </>
-            )}
-            {local.llm.provider === 'openai' && (
-              <>
-                <Field label="Clé API OpenAI">
-                  <ApiKeyInput value={local.llm.openaiApiKey} onChange={(v) => set('llm', 'openaiApiKey', v)} placeholder="sk-..." keyId="openai" showKeys={showKeys} toggleKey={toggleKey} />
-                </Field>
-                <Field label="Modèle">
-                  <input type="text" className="input-base" value={local.llm.openaiModel} onChange={(e) => set('llm', 'openaiModel', e.target.value)} />
-                </Field>
-              </>
-            )}
-            {local.llm.provider === 'anthropic' && (
-              <>
-                <Field label="Clé API Anthropic">
-                  <ApiKeyInput value={local.llm.anthropicApiKey} onChange={(v) => set('llm', 'anthropicApiKey', v)} placeholder="sk-ant-..." keyId="anthropic" showKeys={showKeys} toggleKey={toggleKey} />
-                </Field>
-                <Field label="Modèle">
-                  <input type="text" className="input-base" value={local.llm.anthropicModel} onChange={(e) => set('llm', 'anthropicModel', e.target.value)} />
-                </Field>
-              </>
-            )}
-            {local.llm.provider === 'glm' && (
-              <>
-                <Field label="Clé API GLM (Zhipu AI)">
-                  <ApiKeyInput value={local.llm.glmApiKey} onChange={(v) => set('llm', 'glmApiKey', v)} placeholder="votre-clé-api…" keyId="glm" showKeys={showKeys} toggleKey={toggleKey} />
-                </Field>
-                <Field label="Modèle">
-                  <input type="text" className="input-base" value={local.llm.glmModel} onChange={(e) => set('llm', 'glmModel', e.target.value)} placeholder="glm-4-flash" />
-                </Field>
-              </>
-            )}
-
-            {local.llm.provider !== 'none' && (
-              <>
-                <Field label={`Température — ${local.llm.temperature.toFixed(2)}`}>
-                  <input type="range" min="0" max="1" step="0.05" value={local.llm.temperature} onChange={(e) => set('llm', 'temperature', parseFloat(e.target.value))} style={{ width: '100%' }} />
-                </Field>
-                <Field label="Prompt personnalisé (mode Custom)" hint="Utilisé uniquement en mode 'Custom'">
-                  <textarea
-                    value={local.llm.customPrompt}
-                    onChange={(e) => set('llm', 'customPrompt', e.target.value)}
-                    className="input-base"
-                    style={{ resize: 'none', height: 72 }}
-                    placeholder="Entrez un prompt système personnalisé…"
-                  />
-                </Field>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── Shortcuts ── */}
-        {tab === 'shortcuts' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <SectionHeader>Raccourcis globaux</SectionHeader>
-            <Field label="Démarrer / Arrêter la dictée">
-              <input type="text" className="input-base" value={local.shortcuts.toggleRecording} onChange={(e) => set('shortcuts', 'toggleRecording', e.target.value)} style={{ fontFamily: 'ui-monospace, monospace' }} />
-            </Field>
-          </div>
-        )}
-
-        {/* ── Privacy ── */}
-        {tab === 'privacy' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <SectionHeader>Mode de confidentialité</SectionHeader>
-            {(
-              [
-                { mode: 'local'  as PrivacyMode, label: '100% Local',  desc: 'Aucune donnée envoyée en ligne',               color: '#34d399' },
-                { mode: 'hybrid' as PrivacyMode, label: 'Hybride',     desc: 'STT local, LLM cloud si configuré',            color: '#fbbf24' },
-                { mode: 'cloud'  as PrivacyMode, label: 'Cloud',       desc: 'STT et LLM cloud pour la meilleure qualité',  color: '#f87171' },
-              ] as const
-            ).map(({ mode, label, desc, color }) => {
-              const active = local.privacy === mode;
-              return (
-                <div
-                  key={mode}
-                  onClick={() => setLocal((p) => p ? { ...p, privacy: mode } : p)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '12px 14px', borderRadius: 11, cursor: 'pointer',
-                    border: `1px solid ${active ? color + '44' : 'var(--border)'}`,
-                    background: active ? color + '10' : 'var(--bg-input)',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{
-                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                    background: active ? color : 'var(--text-muted)',
-                    boxShadow: active ? `0 0 8px ${color}` : 'none',
-                  }} />
-                  <div>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: active ? color : 'var(--text-primary)' }}>{label}</p>
-                    <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{desc}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── UI ── */}
-        {tab === 'ui' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <SectionHeader>Apparence</SectionHeader>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {([{ id: 'dark', label: '🌙  Sombre' }, { id: 'light', label: '☀️  Clair' }] as const).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={async () => {
-                    setTheme(t.id);
-                    set('ui', 'theme', t.id);
-                    if (local && window.voiceink) {
-                      const updated = { ...local, ui: { ...local.ui, theme: t.id } };
-                      await window.voiceink.setSettings(updated);
-                    }
-                  }}
-                  style={{
-                    flex: 1, padding: '9px', borderRadius: 9, fontSize: 11, fontWeight: 600,
-                    border: `1px solid ${theme === t.id ? 'var(--pill-active-border)' : 'var(--border)'}`,
-                    background: theme === t.id ? 'var(--accent-subtle)' : 'var(--bg-input)',
-                    color: theme === t.id ? 'var(--accent)' : 'var(--text-secondary)',
-                    cursor: 'pointer', transition: 'all 0.15s ease',
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <SectionHeader>Comportement</SectionHeader>
-            <Row label="Minimiser dans le tray" desc="Garder l'app active en arrière-plan">
-              <Toggle value={local.ui.minimizeToTray} onChange={(v) => set('ui', 'minimizeToTray', v)} label="Tray" />
-            </Row>
-            <Row label="Démarrer minimisé">
-              <Toggle value={local.ui.startMinimized} onChange={(v) => set('ui', 'startMinimized', v)} label="Démarrage minimisé" />
-            </Row>
-            <Row label="Afficher l'overlay flottant">
-              <Toggle value={local.ui.showOverlay} onChange={(v) => set('ui', 'showOverlay', v)} label="Overlay" />
-            </Row>
-          </div>
-        )}
-      </div>
+      <Switch value={value} onChange={onChange} />
     </div>
+  );
+}
+
+function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className={`switch ${value ? 'on' : ''}`} onClick={() => onChange(!value)} role="switch" aria-checked={value} />
   );
 }

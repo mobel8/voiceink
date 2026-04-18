@@ -1,663 +1,334 @@
-import React, { useCallback, useState, useEffect, useRef } from 'react';
-import {
-  Mic, Square, Loader2, Copy, ClipboardPaste,
-  AlertCircle, Minimize2, ArrowRight, Check, Globe, Sparkles,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Sparkles, Globe } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
-import { SUPPORTED_LANGUAGES } from '../lib/constants';
-import type { ProcessingMode } from '@shared/types';
+import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS } from '../lib/constants';
+import { Mode } from '../../shared/types';
 
-const MODE_PILLS: { mode: ProcessingMode; label: string }[] = [
-  { mode: 'raw',           label: 'Brut'    },
-  { mode: 'email',         label: 'Email'   },
-  { mode: 'short_message', label: 'Message' },
-  { mode: 'meeting_notes', label: 'Notes'   },
-  { mode: 'summary',       label: 'Résumé'  },
-  { mode: 'formal',        label: 'Formel'  },
-  { mode: 'simplified',    label: 'Simple'  },
-  { mode: 'custom',        label: 'Custom'  },
-];
-
-/* ─── Organic waveform orb ─── */
-function WaveformOrb({
-  audioLevel, isRecording, state,
-}: { audioLevel: number; isRecording: boolean; state: string }) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const historyRef = useRef<number[]>(new Array(96).fill(0));
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const size = 240;
-    const dpr  = window.devicePixelRatio || 2;
-    canvas.width  = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
-
-    let animId: number;
-    const cx = size / 2, cy = size / 2;
-    const baseRadius = 66, pts = 96;
-
-    const draw = () => {
-      ctx.clearRect(0, 0, size, size);
-      const hist = historyRef.current;
-      const t    = Date.now();
-
-      for (let i = 0; i < pts; i++) {
-        const target = isRecording
-          ? audioLevel
-            * (0.28 + 0.72 * Math.sin(t / 180 + i * 0.22))
-            * (0.5  + 0.5  * Math.cos(t / 300 + i * 0.14))
-          : 0;
-        hist[i] += (target - hist[i]) * 0.068;
-      }
-
-      const points: [number, number][] = [];
-      for (let i = 0; i < pts; i++) {
-        const angle = (i / pts) * Math.PI * 2 - Math.PI / 2;
-        const amp   = hist[i] * 26;
-        const wobble = state === 'idle' ? Math.sin(t / 3200 + i * 0.12) * 0.55 : 0;
-        const r = baseRadius + amp + wobble;
-        points.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
-      }
-
-      ctx.beginPath();
-      for (let i = 0; i < pts; i++) {
-        const p0 = points[(i - 1 + pts) % pts];
-        const p1 = points[i];
-        const p2 = points[(i + 1) % pts];
-        const p3 = points[(i + 2) % pts];
-        if (i === 0) ctx.moveTo(p1[0], p1[1]);
-        ctx.bezierCurveTo(
-          p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
-          p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
-          p2[0], p2[1],
-        );
-      }
-      ctx.closePath();
-
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius + 28);
-      if (state === 'recording') {
-        grad.addColorStop(0, 'rgba(124,106,247,0.01)');
-        grad.addColorStop(0.6, 'rgba(124,106,247,0.05)');
-        grad.addColorStop(1, 'rgba(124,106,247,0.12)');
-        ctx.strokeStyle = `rgba(124,106,247,${0.22 + audioLevel * 0.55})`;
-        ctx.lineWidth   = 1.6;
-        ctx.shadowColor = 'rgba(124,106,247,0.3)';
-        ctx.shadowBlur  = 18;
-      } else if (state === 'processing') {
-        grad.addColorStop(0, 'rgba(251,191,36,0.01)');
-        grad.addColorStop(1, 'rgba(251,191,36,0.06)');
-        ctx.strokeStyle = 'rgba(251,191,36,0.28)';
-        ctx.lineWidth   = 1.2;
-      } else {
-        grad.addColorStop(0, 'rgba(124,106,247,0.003)');
-        grad.addColorStop(1, 'rgba(124,106,247,0.018)');
-        ctx.strokeStyle = `rgba(124,106,247,${0.07 + 0.03 * Math.sin(t / 2200)})`;
-        ctx.lineWidth   = 0.7;
-      }
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      animId = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => cancelAnimationFrame(animId);
-  }, [audioLevel, isRecording, state]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 pointer-events-none"
-      style={{ width: 240, height: 240 }}
-    />
-  );
-}
-
-/* ─── Language dropdown ─── */
-function LangDropdown({
-  languages, selected, onSelect, showDisable, disabledCode,
-}: {
-  languages: typeof SUPPORTED_LANGUAGES;
-  selected: string;
-  onSelect: (code: string) => void;
-  showDisable?: boolean;
-  disabledCode?: string;
-}) {
-  return (
-    <div
-      className="glass-card animate-scale-in absolute z-50 py-1"
-      style={{
-        top: 'calc(100% + 6px)', right: 0,
-        minWidth: 152, maxHeight: 220,
-        overflowY: 'auto', borderRadius: 10,
-      }}
-    >
-      {showDisable && (
-        <>
-          <button
-            onClick={() => onSelect('')}
-            style={{
-              display: 'block', width: '100%', textAlign: 'left',
-              padding: '6px 12px', fontSize: 11,
-              color: !selected ? 'var(--accent)' : 'var(--text-secondary)',
-              background: 'transparent',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            Désactiver
-          </button>
-          <div style={{ margin: '2px 8px', borderTop: '1px solid var(--border)' }} />
-        </>
-      )}
-      {languages.map((lang) => (
-        <button
-          key={lang.code}
-          onClick={() => onSelect(lang.code)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            width: '100%', textAlign: 'left',
-            padding: '6px 12px', fontSize: 11,
-            color: selected === lang.code ? 'var(--accent)' : 'var(--text-primary)',
-            background: 'transparent',
-            opacity: lang.code === disabledCode ? 0.25 : 1,
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-        >
-          {selected === lang.code && <Check size={10} style={{ flexShrink: 0 }} />}
-          <span style={{ marginLeft: selected === lang.code ? 0 : 16 }}>{lang.name}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/* ─── Main View ─── */
 export function MainView() {
   const {
-    recordingState, setRecordingState,
-    currentText, setCurrentText,
-    processedText, setProcessedText,
-    selectedMode, setSelectedMode,
-    selectedLanguage, setSelectedLanguage,
-    targetLanguage, setTargetLanguage,
-    addToast,
-    llmStreamText, setLlmStreamText, isLlmStreaming,
-    setRecordingStartTime, setLastTranscriptionMs,
-    setCompactMode, compactSize,
+    settings,
+    setView,
+    recState, setRecState,
+    lastTranscript, setLastTranscript,
+    lastLatencyMs, setLastLatencyMs,
+    lastError, setLastError,
+    audioLevel, setAudioLevel,
+    loadHistory,
   } = useStore();
+  const hasKey = !!settings.groqApiKey;
 
-  const { isRecording, audioLevel, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
-  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
-  const [showLangPicker,       setShowLangPicker]       = useState(false);
-  const [showTargetLangPicker, setShowTargetLangPicker] = useState(false);
-  const [copied,  setCopied]  = useState(false);
-  const toggleRef      = useRef<(() => void) | null>(null);
-  const langRef        = useRef<HTMLDivElement>(null);
-  const targetLangRef  = useRef<HTMLDivElement>(null);
-  const resultsRef     = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (langRef.current       && !langRef.current.contains(e.target as Node))       setShowLangPicker(false);
-      if (targetLangRef.current && !targetLangRef.current.contains(e.target as Node)) setShowTargetLangPicker(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => {
-    if (resultsRef.current)
-      resultsRef.current.scrollTop = resultsRef.current.scrollHeight;
-  }, [llmStreamText, currentText]);
-
-  const handleToggleRecording = useCallback(async () => {
-    if (recordingState === 'processing') return;
-    try {
-      if (isRecording) {
-        setRecordingState('processing');
-        const t0        = Date.now();
-        const audioData = await stopRecording();
-        if (audioData && window.voiceink) {
-          try {
-            const result = await window.voiceink.transcribe(audioData, selectedLanguage);
-            setLastTranscriptionMs(Date.now() - t0);
-            if (result?.text) {
-              setCurrentText(result.text);
-              const needsTranslation = targetLanguage && targetLanguage !== '' && targetLanguage !== selectedLanguage;
-              const needsLLM         = selectedMode !== 'raw';
-              if (!needsTranslation && !needsLLM) {
-                window.voiceink.injectText(result.text).catch(() => {});
-              } else {
-                setLlmStreamText('');
-                const tLang = needsTranslation ? targetLanguage : undefined;
-                window.voiceink.processText(result.text, selectedMode, tLang).then((p: any) => {
-                  if (p?.processed) {
-                    setProcessedText(p.processed);
-                    window.voiceink.injectText(p.processed).catch(() => {});
-                  }
-                }).catch(() => { window.voiceink.injectText(result.text).catch(() => {}); });
-              }
-            } else {
-              setTranscriptionError('Aucune parole détectée.');
-            }
-          } catch (err: any) {
-            setTranscriptionError(err?.message || 'Erreur de transcription');
-          }
+  const recorder = useAudioRecorder({
+    onLevel: (rms) => setAudioLevel(rms),
+    onStop: async (blob, mimeType) => {
+      setRecState('processing');
+      setAudioLevel(0);
+      const t0 = Date.now();
+      try {
+        const audioBase64 = await blobToBase64(blob);
+        const res = await window.voiceink.transcribe({
+          audioBase64,
+          mimeType,
+          language: settings.language === 'auto' ? undefined : settings.language,
+          translateTo: settings.translateTo || undefined,
+          mode: settings.mode,
+        });
+        setLastLatencyMs(Date.now() - t0);
+        if (!res.ok) {
+          setLastError(res.error || 'Erreur inconnue');
+          setRecState('error');
+          return;
         }
-        setRecordingState('idle');
-        setRecordingStartTime(null);
-      } else {
-        setCurrentText(''); setProcessedText(''); setLlmStreamText('');
-        setTranscriptionError(null);
-        setRecordingState('recording');
-        setRecordingStartTime(Date.now());
-        await startRecording();
+        setLastTranscript(res.finalText);
+        setRecState('idle');
+        setLastError('');
+        loadHistory();
+        if (settings.autoInject && res.finalText) {
+          await window.voiceink.injectText(res.finalText);
+        }
+      } catch (err: any) {
+        setLastError(err?.message || String(err));
+        setRecState('error');
       }
-    } catch (err: any) {
-      setTranscriptionError(err?.message || "Erreur d'enregistrement");
-      setRecordingState('idle');
-      setRecordingStartTime(null);
+    },
+    onError: (err) => {
+      setLastError(err.message);
+      setRecState('error');
+    },
+  });
+
+  const toggle = async () => {
+    if (recState === 'recording') {
+      recorder.stop();
+    } else if (recState === 'idle' || recState === 'error') {
+      setLastError('');
+      setLastTranscript('');
+      setRecState('recording');
+      await recorder.start();
     }
-  }, [
-    isRecording, recordingState, startRecording, stopRecording,
-    setRecordingState, setCurrentText, setProcessedText, selectedMode,
-    setLlmStreamText, setRecordingStartTime, setLastTranscriptionMs,
-    selectedLanguage, targetLanguage,
-  ]);
-
-  toggleRef.current = handleToggleRecording;
-
-  useEffect(() => {
-    if (!window.voiceink?.onToggleRecording) return;
-    return window.voiceink.onToggleRecording(() => toggleRef.current?.());
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && (e.code === 'Space' || e.key === ' ')) {
-        e.preventDefault(); e.stopPropagation();
-        toggleRef.current?.();
-      }
-      if (e.key === 'Escape') { setRecordingState('idle'); setRecordingStartTime(null); }
-    };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [setRecordingState, setRecordingStartTime]);
-
-  const handleCopy = useCallback(() => {
-    const text = processedText || llmStreamText || currentText;
-    if (text) {
-      navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-      addToast({ type: 'success', message: 'Copié' });
-    }
-  }, [processedText, llmStreamText, currentText, addToast]);
-
-  const handleInject = useCallback(() => {
-    const text = processedText || llmStreamText || currentText;
-    if (text && window.voiceink) {
-      window.voiceink.injectText(text);
-      addToast({ type: 'success', message: 'Injecté' });
-    }
-  }, [processedText, llmStreamText, currentText, addToast]);
-
-  const handleCompact = () => {
-    // Keep in sync with CompactOverlay.tsx SIZES — square box clipped to circle
-    const boxMap = { xs: 104, sm: 134, md: 174 } as const;
-    const d      = boxMap[compactSize];
-    setCompactMode(true);
-    window.voiceink?.setCompactMode(true, d, d);
   };
 
-  const activeModeName = MODE_PILLS.find((p) => p.mode === selectedMode)?.label ?? '';
-  const hasResults     = !!(currentText || llmStreamText || processedText);
+  // Global toggle shortcut from main process
+  useEffect(() => {
+    const unsub = window.voiceink.onToggleRecording(() => toggle());
+    return () => unsub?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recState, settings]);
+
+  // Keyboard: Space to toggle (when focused on main view, not in input)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); toggle(); }
+      if (e.code === 'Escape' && recState === 'recording') { recorder.stop(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recState]);
+
+  const copy = async () => {
+    if (!lastTranscript) return;
+    await window.voiceink.copyText(lastTranscript);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  };
+  const inject = async () => {
+    if (!lastTranscript) return;
+    await window.voiceink.injectText(lastTranscript);
+  };
+
+  const bars = useWaveform(audioLevel, recState === 'recording');
 
   return (
-    <div
-      className="flex flex-col h-full animate-fade-in"
-      style={{ background: 'var(--gradient-surface)' }}
-    >
-
-      {/* ── Top toolbar ── */}
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '8px 12px 6px',
-          borderBottom: '1px solid var(--border-subtle)',
-          flexShrink: 0,
-        }}
-      >
-        {/* Mode pills */}
-        <div
-          className="scrollbar-hide"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 3,
-            flex: 1, overflowX: 'auto', padding: '1px 0',
-          }}
-        >
-          {MODE_PILLS.map(({ mode, label }) => (
-            <button
-              key={mode}
-              onClick={() => setSelectedMode(mode)}
-              className={`mode-pill ${selectedMode === mode ? 'active' : ''}`}
-              style={{
-                padding: '5px 11px', borderRadius: 8, fontSize: 11,
-                whiteSpace: 'nowrap',
-                color: selectedMode !== mode ? 'var(--text-muted)' : undefined,
-              }}
-            >
-              {label}
-            </button>
-          ))}
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-6 pt-6 pb-3 flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">
+            <span className="gradient-text">Dictée intelligente</span>
+          </h1>
+          <p className="text-white/50 text-xs mt-1">
+            Parlez. On transcrit en un éclair.{' '}
+            <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70 text-[10px] border border-white/10">Espace</kbd> pour démarrer / arrêter.
+          </p>
         </div>
-
-        {/* Controls: compact + language + translation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-
-          {/* Source language */}
-          <div className="relative" ref={langRef}>
-            <button
-              onClick={() => { setShowLangPicker(!showLangPicker); setShowTargetLangPicker(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '5px 8px', borderRadius: 7,
-                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em',
-                color: 'var(--text-secondary)',
-                background: showLangPicker ? 'var(--hover-bg)' : 'transparent',
-                border: '1px solid transparent', cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-              onMouseLeave={(e) => { if (!showLangPicker) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
-            >
-              <Globe size={10} style={{ opacity: 0.6 }} />
-              {selectedLanguage.toUpperCase()}
-            </button>
-            {showLangPicker && (
-              <LangDropdown
-                languages={SUPPORTED_LANGUAGES}
-                selected={selectedLanguage}
-                onSelect={(c) => { setSelectedLanguage(c); setShowLangPicker(false); }}
-              />
-            )}
-          </div>
-
-          {/* Target translation */}
-          <div className="relative" ref={targetLangRef}>
-            <button
-              onClick={() => { setShowTargetLangPicker(!showTargetLangPicker); setShowLangPicker(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '5px 8px', borderRadius: 7,
-                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em',
-                color:      targetLanguage ? 'var(--accent)'         : 'var(--text-muted)',
-                background: targetLanguage ? 'var(--accent-subtle)'  : showTargetLangPicker ? 'var(--hover-bg)' : 'transparent',
-                border: targetLanguage ? '1px solid var(--pill-active-border)' : '1px solid transparent',
-                cursor: 'pointer', transition: 'all 0.15s ease',
-              }}
-              title="Traduction"
-              onMouseEnter={(e) => { if (!targetLanguage) { e.currentTarget.style.background = 'var(--hover-bg)'; e.currentTarget.style.borderColor = 'var(--border)'; } }}
-              onMouseLeave={(e) => { if (!targetLanguage && !showTargetLangPicker) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
-            >
-              <ArrowRight size={9} />
-              {targetLanguage ? targetLanguage.toUpperCase() : '—'}
-            </button>
-            {showTargetLangPicker && (
-              <LangDropdown
-                languages={SUPPORTED_LANGUAGES}
-                selected={targetLanguage}
-                onSelect={(c) => { setTargetLanguage(c); setShowTargetLangPicker(false); }}
-                showDisable
-                disabledCode={selectedLanguage}
-              />
-            )}
-          </div>
-
-          <div className="separator" style={{ height: 16 }} />
-
-          <button
-            onClick={handleCompact}
-            className="icon-btn"
-            title="Mode compact"
-            style={{ width: 28, height: 28, borderRadius: 7 }}
-          >
-            <Minimize2 size={12} />
-          </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <ModePicker />
+          <LanguagePicker />
+          <TranslatePicker />
         </div>
       </div>
 
-      {/* ── Orb area ── */}
-      <div
-        style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', position: 'relative',
-          flex: hasResults ? '0 0 auto' : 1,
-          minHeight: hasResults ? 200 : undefined,
-          paddingTop: hasResults ? 16 : 0,
-          paddingBottom: hasResults ? 10 : 0,
-        }}
-      >
-        {/* Background ambient glow */}
-        <div className="orb-glow-bg" />
-
-        <div style={{ position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <WaveformOrb audioLevel={audioLevel} isRecording={isRecording} state={recordingState} />
-
-          {/* Idle ambient rings */}
-          {recordingState === 'idle' && (
-            <>
-              <div
-                className="orb-ring absolute rounded-full"
-                style={{ width: 158, height: 158, border: '1px solid rgba(139,120,255,0.08)' }}
-              />
-              <div
-                className="orb-ring absolute rounded-full"
-                style={{ width: 118, height: 118, border: '1px solid rgba(139,120,255,0.05)', animationDelay: '2.5s' }}
-              />
-            </>
-          )}
-
-          {/* Recording ripples */}
-          {isRecording && (
-            <>
-              <div className="ripple-ring absolute" style={{ width: 80, height: 80, borderRadius: '50%', border: '1.5px solid rgba(139,120,255,0.3)' }} />
-              <div className="ripple-ring absolute" style={{ width: 80, height: 80, borderRadius: '50%', border: '1px solid rgba(139,120,255,0.15)' }} />
-              <div className="ripple-ring absolute" style={{ width: 80, height: 80, borderRadius: '50%', border: '1px solid rgba(139,120,255,0.06)' }} />
-            </>
-          )}
-
-          {/* Mic button */}
-          <button
-            onClick={handleToggleRecording}
-            disabled={recordingState === 'processing'}
-            className={`relative z-10 flex items-center justify-center rounded-full transition-all duration-300 ${
-              isRecording  ? 'recording-glow'
-              : recordingState === 'processing' ? ''
-              : 'mic-glow'
-            }`}
-            style={{
-              width: 74, height: 74,
-              background:
-                isRecording              ? 'var(--gradient-mic-rec)'
-                : recordingState === 'processing' ? 'var(--bg-elevated)'
-                : 'var(--gradient-mic)',
-              transform: isRecording ? 'scale(1.10)' : 'scale(1)',
-              cursor: recordingState === 'processing' ? 'wait' : 'pointer',
-              border: 'none',
-              boxShadow: recordingState === 'processing'
-                ? 'none'
-                : isRecording
-                ? '0 0 0 1px rgba(255,255,255,0.1) inset'
-                : '0 0 0 1px rgba(255,255,255,0.15) inset',
-            }}
-          >
-            {recordingState === 'processing' ? (
-              <Loader2 size={22} className="spin-smooth" style={{ color: 'var(--accent-muted)' }} />
-            ) : isRecording ? (
-              <Square size={17} fill="white" style={{ color: 'white', opacity: 0.95 }} />
-            ) : (
-              <Mic size={22} style={{ color: 'white', opacity: 0.95 }} />
-            )}
+      {/* Setup banner: no API key yet */}
+      {!hasKey && (
+        <div className="mx-6 mb-3 glass rounded-xl px-4 py-3 flex items-center gap-3 slide-up" style={{ borderColor: 'rgba(251,191,36,0.35)' }}>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 grid place-items-center shadow-lg shadow-amber-500/30 shrink-0">
+            <Key size={14} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">Configurez votre clé Groq pour commencer</div>
+            <div className="text-white/60 text-xs mt-0.5 truncate">
+              Gratuite sur <a className="text-amber-300 hover:underline" href="https://console.groq.com/keys" target="_blank" rel="noreferrer">console.groq.com/keys</a>. Stockée localement.
+            </div>
+          </div>
+          <button className="btn btn-primary !text-xs !py-1.5" onClick={() => setView('settings')}>
+            Paramètres <ArrowRight size={12} />
           </button>
-        </div>
-
-        {/* Hint below orb */}
-        {recordingState === 'idle' && !hasResults && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            <kbd
-              style={{
-                padding: '4px 10px', borderRadius: 7, fontSize: 10,
-                fontFamily: 'ui-monospace, monospace', letterSpacing: '0.05em',
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                color: 'var(--text-muted)', fontWeight: 500,
-              }}
-            >
-              Ctrl + Shift + Space
-            </kbd>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {selectedMode !== 'raw' && (
-                <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--accent)', opacity: 0.7, fontWeight: 500 }}>
-                  <Sparkles size={9} /> {activeModeName}
-                </span>
-              )}
-              {targetLanguage && (
-                <span style={{ fontSize: 10, color: 'var(--accent)', opacity: 0.65, fontWeight: 500 }}>
-                  → {SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.name}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Error */}
-        {(recorderError || transcriptionError) && (
-          <div
-            className="animate-slide-up flex items-center gap-2"
-            style={{
-              margin: '12px 16px 0',
-              padding: '9px 14px', borderRadius: 10,
-              background: 'rgba(244,63,94,0.07)', border: '1px solid rgba(244,63,94,0.14)',
-              boxShadow: '0 2px 12px rgba(244,63,94,0.08)',
-            }}
-          >
-            <AlertCircle size={13} style={{ color: 'var(--danger)', flexShrink: 0 }} />
-            <p style={{ fontSize: 11.5, color: 'var(--danger)', lineHeight: 1.4 }}>
-              {recorderError || transcriptionError}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Results area ── */}
-      {hasResults && (
-        <div
-          className="animate-slide-up"
-          style={{ flex: 1, minHeight: 0, padding: '0 12px 12px' }}
-        >
-          <div
-            className="result-card h-full flex flex-col"
-            style={{ borderRadius: 16, overflow: 'hidden' }}
-          >
-            {/* Header */}
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '9px 14px',
-                borderBottom: '1px solid var(--border-subtle)',
-                flexShrink: 0,
-                background: 'rgba(139,120,255,0.025)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{
-                  width: 5, height: 5, borderRadius: '50%',
-                  background: isLlmStreaming ? 'var(--warning)' : 'var(--accent)',
-                  boxShadow: `0 0 6px ${isLlmStreaming ? 'var(--warning)' : 'var(--accent)'}`,
-                  flexShrink: 0,
-                  animation: isLlmStreaming ? 'mic-recording 1s ease-in-out infinite' : undefined,
-                }} />
-                <span className="label-xs">
-                  {isLlmStreaming ? 'Traitement…'
-                    : currentText && !processedText && !llmStreamText ? 'Transcription'
-                    : 'Résultat'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 3 }}>
-                <button
-                  onClick={handleCopy}
-                  className="icon-btn"
-                  title="Copier"
-                  style={{
-                    width: 28, height: 28, borderRadius: 7,
-                    color: copied ? 'var(--success)' : undefined,
-                  }}
-                >
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                </button>
-                <button
-                  onClick={handleInject}
-                  className="icon-btn"
-                  title="Coller dans le curseur"
-                  style={{ width: 28, height: 28, borderRadius: 7 }}
-                >
-                  <ClipboardPaste size={12} />
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div
-              ref={resultsRef}
-              style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}
-            >
-              {currentText && (
-                <div style={{ marginBottom: (llmStreamText || processedText) ? 14 : 0 }}>
-                  {(llmStreamText || processedText) && (
-                    <p className="label-xs" style={{ marginBottom: 7 }}>
-                      Original
-                    </p>
-                  )}
-                  <p
-                    style={{
-                      fontSize: 13, lineHeight: 1.85, whiteSpace: 'pre-wrap',
-                      color: (llmStreamText || processedText) ? 'var(--text-muted)' : 'var(--text-primary)',
-                      fontWeight: 400,
-                    }}
-                  >
-                    {currentText}
-                  </p>
-                </div>
-              )}
-              {(llmStreamText || processedText) && (
-                <div style={{
-                  paddingTop: 14,
-                  borderTop: '1px solid var(--border-subtle)',
-                }}>
-                  <p className="label-accent" style={{ marginBottom: 7 }}>
-                    {targetLanguage ? `→ ${targetLanguage.toUpperCase()}` : activeModeName}
-                  </p>
-                  <p
-                    className={isLlmStreaming ? 'streaming-cursor' : ''}
-                    style={{ fontSize: 13.5, lineHeight: 1.85, whiteSpace: 'pre-wrap', color: 'var(--text-primary)', fontWeight: 400 }}
-                  >
-                    {processedText || llmStreamText}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       )}
+
+      {/* Record area */}
+      <div className="flex-1 min-h-0 grid grid-rows-[1fr_auto] px-6 pb-5 gap-4">
+        <div className="glass-strong rounded-2xl flex flex-col items-center justify-center p-6 relative overflow-hidden">
+          {/* Ambient dots */}
+          <div className="absolute inset-0 opacity-[0.06]" style={{
+            backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+            backgroundSize: '24px 24px'
+          }} />
+          <div className="relative z-10 flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className={`record-halo ${recState === 'recording' ? 'recording' : ''}`} />
+              <button
+                className={`record-btn ${recState === 'recording' ? 'recording' : ''} ${recState === 'processing' ? 'processing' : ''}`}
+                onClick={toggle}
+                disabled={recState === 'processing'}
+                title={recState === 'recording' ? 'Arrêter' : 'Démarrer'}
+              >
+                {recState === 'processing' && <Loader2 size={38} className="animate-spin" />}
+                {recState === 'recording' && <Square size={34} fill="white" />}
+                {(recState === 'idle' || recState === 'error') && <Mic size={40} />}
+              </button>
+            </div>
+
+            <div className="text-center min-h-[44px]">
+              {recState === 'idle' && (
+                <>
+                  <div className="text-base font-medium">Prêt à vous écouter</div>
+                  <div className="text-white/40 text-xs mt-0.5">
+                    Cliquez ou appuyez sur <kbd className="px-1 py-0.5 rounded bg-white/10 text-white/70 text-[10px] border border-white/10 mx-1">Espace</kbd>
+                    {settings.translateTo && (
+                      <> · <Languages size={10} className="inline" /> Traduction: <span className="text-fuchsia-300">{TRANSLATE_TARGETS.find((t) => t.code === settings.translateTo)?.native}</span></>
+                    )}
+                  </div>
+                </>
+              )}
+              {recState === 'recording' && (
+                <>
+                  <div className="text-base font-medium text-rose-300">Enregistrement…</div>
+                  <div className="text-white/40 text-xs mt-0.5">Appuyez à nouveau pour arrêter</div>
+                </>
+              )}
+              {recState === 'processing' && (
+                <>
+                  <div className="text-base font-medium text-cyan-300">Transcription en cours…</div>
+                  <div className="text-white/40 text-xs mt-0.5">
+                    Whisper Turbo sur Groq{settings.translateTo && <> + traduction</>}
+                  </div>
+                </>
+              )}
+              {recState === 'error' && (
+                <>
+                  <div className="text-base font-medium text-rose-300 flex items-center justify-center gap-1.5">
+                    <AlertCircle size={14} /> Oups, une erreur
+                  </div>
+                  <div className="text-white/50 text-xs mt-0.5 max-w-md">{lastError}</div>
+                </>
+              )}
+            </div>
+
+            {/* Waveform — fluid width with a sensible max */}
+            <div className="wave w-full max-w-[min(60vw,360px)]">
+              {bars.map((h, i) => (
+                <div key={i} className="bar" style={{ height: `${h}px`, opacity: recState === 'recording' ? 1 : 0.25 }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Transcript panel */}
+        <div className="glass rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="label">Dernière transcription</span>
+              {lastLatencyMs > 0 && (
+                <span className="badge badge-green">
+                  <Zap size={9} /> {lastLatencyMs}ms
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1">
+              <button className="btn btn-ghost !text-xs !py-1" onClick={copy} disabled={!lastTranscript}>
+                {copied ? <><Check size={12} /> Copié</> : <><Copy size={12} /> Copier</>}
+              </button>
+              <button className="btn btn-ghost !text-xs !py-1" onClick={inject} disabled={!lastTranscript}>
+                <ClipboardPaste size={12} /> Coller
+              </button>
+            </div>
+          </div>
+          <div
+            className="min-h-[68px] max-h-40 overflow-auto text-white/90 text-sm leading-relaxed select-text whitespace-pre-wrap"
+            style={{ userSelect: 'text' }}
+          >
+            {lastTranscript || <span className="text-white/30">Votre transcription apparaîtra ici…</span>}
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function ModePicker() {
+  const { settings, updateSettings } = useStore();
+  const active = settings.mode !== 'raw';
+  return (
+    <label className={`picker-chip ${active ? 'is-active' : ''}`} title="Mode de post-traitement">
+      <Sparkles size={12} className="picker-chip-icon" />
+      <select
+        value={settings.mode}
+        onChange={(e) => updateSettings({ mode: e.target.value as Mode })}
+      >
+        {Object.entries(MODE_LABELS).map(([k, v]) => (
+          <option key={k} value={k}>{v.icon} {v.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LanguagePicker() {
+  const { settings, updateSettings } = useStore();
+  const active = settings.language !== 'auto';
+  return (
+    <label className={`picker-chip ${active ? 'is-active' : ''}`} title="Langue de dictée">
+      <Globe size={12} className="picker-chip-icon" />
+      <select
+        value={settings.language}
+        onChange={(e) => updateSettings({ language: e.target.value })}
+      >
+        {SUPPORTED_LANGUAGES.map((l) => (
+          <option key={l.code} value={l.code}>{l.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TranslatePicker() {
+  const { settings, updateSettings } = useStore();
+  const active = !!settings.translateTo;
+  return (
+    <label className={`picker-chip ${active ? 'is-active' : ''}`} title="Traduire automatiquement la dictée">
+      <Languages size={12} className="picker-chip-icon" />
+      <select
+        value={settings.translateTo}
+        onChange={(e) => updateSettings({ translateTo: e.target.value })}
+      >
+        {TRANSLATE_TARGETS.map((t) => (
+          <option key={t.code || 'none'} value={t.code}>
+            {t.code ? `→ ${t.native}` : 'Pas de traduction'}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function useWaveform(level: number, active: boolean): number[] {
+  const [bars, setBars] = useState<number[]>(() => new Array(48).fill(4));
+  const levelRef = useRef(level);
+  const activeRef = useRef(active);
+  levelRef.current = level;
+  activeRef.current = active;
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBars((prev) => {
+        const next = prev.slice(1);
+        const target = activeRef.current
+          ? 6 + levelRef.current * 54 + Math.random() * 6
+          : 4 + Math.random() * 2;
+        next.push(target);
+        return next;
+      });
+    }, 60);
+    return () => clearInterval(id);
+  }, []);
+  return bars;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = String(reader.result || '');
+      const comma = s.indexOf(',');
+      resolve(comma >= 0 ? s.slice(comma + 1) : s);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }

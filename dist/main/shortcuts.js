@@ -1,62 +1,73 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ShortcutManager = void 0;
+exports.registerShortcuts = registerShortcuts;
+exports.unregisterShortcuts = unregisterShortcuts;
 const electron_1 = require("electron");
 const types_1 = require("../shared/types");
-class ShortcutManager {
-    mainWindow;
-    configService;
-    constructor(mainWindow, configService) {
-        this.mainWindow = mainWindow;
-        this.configService = configService;
-    }
-    register() {
-        this.unregisterAll();
-        const settings = this.configService.getSettings();
-        const shortcuts = settings.shortcuts;
-        // Toggle recording shortcut
-        if (shortcuts.toggleRecording) {
-            try {
-                const ok = electron_1.globalShortcut.register(shortcuts.toggleRecording, () => {
-                    console.log('[Shortcut] Toggle recording triggered via globalShortcut');
-                    this.mainWindow.webContents.send(types_1.IPC.APP_TOGGLE_RECORDING);
-                });
-                if (ok) {
-                    console.log(`[Shortcut] Registered toggle: ${shortcuts.toggleRecording}`);
-                }
-                else {
-                    console.warn(`[Shortcut] Failed to register toggle: ${shortcuts.toggleRecording} (already in use or unsupported)`);
-                }
-            }
-            catch (err) {
-                console.error(`[Shortcut] Error registering toggle (${shortcuts.toggleRecording}):`, err);
-            }
+const config_1 = require("./services/config");
+let registered = [];
+/**
+ * Fire the toggle event to the renderer, making the window visible first
+ * (without stealing focus) if it was hidden.
+ */
+function fireToggle(getWin) {
+    const w = getWin();
+    if (!w)
+        return;
+    if (!w.isVisible()) {
+        try {
+            w.showInactive();
         }
-        // Cancel recording shortcut
-        if (shortcuts.cancelRecording) {
-            try {
-                const ok = electron_1.globalShortcut.register(shortcuts.cancelRecording, () => {
-                    console.log('[Shortcut] Cancel recording triggered via globalShortcut');
-                    this.mainWindow.webContents.send(types_1.IPC.APP_RECORDING_STATE, 'idle');
-                });
-                if (ok) {
-                    console.log(`[Shortcut] Registered cancel: ${shortcuts.cancelRecording}`);
-                }
-                else {
-                    console.warn(`[Shortcut] Failed to register cancel: ${shortcuts.cancelRecording} (already in use or unsupported)`);
-                }
-            }
-            catch (err) {
-                console.error(`[Shortcut] Error registering cancel (${shortcuts.cancelRecording}):`, err);
-            }
+        catch { }
+    }
+    w.webContents.send(types_1.IPC.ON_TOGGLE_RECORDING);
+}
+/**
+ * Register the configured global shortcuts.
+ *
+ * NOTE on Push-to-Talk: Electron's `globalShortcut` does NOT emit key-up
+ * events on Windows. A true "hold to talk, release to stop" needs either a
+ * low-level keyboard hook (native, complex) or a separate PTT-specific
+ * mechanism. For now PTT is registered as a second accelerator that also
+ * toggles — giving the user an alternative hotkey they can bind to a
+ * different key (e.g. a macro pad button) without conflicting with the
+ * primary toggle. If/when we add a real PTT via native hook, we'll fire
+ * `ON_PTT_DOWN` / `ON_PTT_UP` from there.
+ */
+function registerShortcuts(getWin) {
+    unregisterShortcuts();
+    const s = (0, config_1.getSettings)();
+    try {
+        if (s.shortcutToggle) {
+            const ok = electron_1.globalShortcut.register(s.shortcutToggle, () => fireToggle(getWin));
+            if (ok)
+                registered.push(s.shortcutToggle);
+            else
+                console.warn('[shortcuts] toggle registration refused (key in use?):', s.shortcutToggle);
         }
-        console.log('[Shortcut] Registration complete. Note: globalShortcut may not work on WSL2 — in-window fallback is active.');
     }
-    unregisterAll() {
-        electron_1.globalShortcut.unregisterAll();
+    catch (e) {
+        console.warn('[shortcuts] failed to register toggle:', e);
     }
-    updateShortcuts() {
-        this.register();
+    try {
+        if (s.pttEnabled && s.shortcutPTT && s.shortcutPTT !== s.shortcutToggle) {
+            const ok = electron_1.globalShortcut.register(s.shortcutPTT, () => fireToggle(getWin));
+            if (ok)
+                registered.push(s.shortcutPTT);
+            else
+                console.warn('[shortcuts] PTT registration refused (key in use?):', s.shortcutPTT);
+        }
+    }
+    catch (e) {
+        console.warn('[shortcuts] failed to register PTT:', e);
     }
 }
-exports.ShortcutManager = ShortcutManager;
+function unregisterShortcuts() {
+    for (const acc of registered) {
+        try {
+            electron_1.globalShortcut.unregister(acc);
+        }
+        catch { }
+    }
+    registered = [];
+}

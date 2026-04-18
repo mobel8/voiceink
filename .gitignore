@@ -5,3 +5,9 @@ release/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local dev helpers (not for source control)
+_run.bat
+_tasks.bat
+runtime.log
+cleanup.js

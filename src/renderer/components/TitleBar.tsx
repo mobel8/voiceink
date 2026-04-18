@@ -1,107 +1,64 @@
-import React from 'react';
-import { Minus, X } from 'lucide-react';
+import { Minus, Square, X, Mic, Minimize2, Pin, PinOff } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 
 export function TitleBar() {
-  const { recordingState } = useStore();
+  const api = (window as any).voiceink;
+  const { settings, updateSettings } = useStore();
+  // This titlebar only renders in comfortable mode; the pill has no titlebar.
+  const compact = false;
 
-  const isRecording  = recordingState === 'recording';
-  const isProcessing = recordingState === 'processing';
+  /**
+   * Switching to the pill triggers a full window recreation in the main
+   * process. We do NOT update the local store first — doing so would
+   * re-render this window with the pill UI for a frame before the window
+   * gets destroyed, which flashes. Main persists the density setting, then
+   * destroys and recreates the window transparently.
+   */
+  const goPill = async () => {
+    await api?.windowResizeForDensity?.('compact');
+  };
+
+  const toggleOnTop = async () => {
+    const next = !settings.alwaysOnTop;
+    await updateSettings({ alwaysOnTop: next });
+    await api?.windowSetAlwaysOnTop?.(next);
+  };
 
   return (
-    <div
-      className="titlebar-drag flex items-center justify-between select-none shrink-0"
-      style={{
-        height: 40,
-        padding: '0 10px 0 14px',
-        background: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-2.5">
-        {/* Logo mark */}
-        <div
-          style={{
-            width: 20, height: 20, borderRadius: 6,
-            background: isRecording
-              ? 'var(--gradient-mic-rec)'
-              : 'var(--gradient-mic)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.5s ease',
-            flexShrink: 0,
-            boxShadow: isRecording
-              ? '0 0 12px rgba(244,63,94,0.4)'
-              : '0 0 12px rgba(139,120,255,0.3)',
-          }}
-        >
-          <div style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.92)',
-            boxShadow: '0 0 5px rgba(255,255,255,0.5)',
-          }} />
+    <div className={`drag flex items-center justify-between border-b border-white/5 bg-black/25 select-none ${compact ? 'h-8 px-2' : 'h-10 px-4'}`}>
+      <div className="flex items-center gap-2 text-sm">
+        <div className={`rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 grid place-items-center shadow-lg shadow-violet-500/40 ${compact ? 'w-5 h-5' : 'w-6 h-6'}`}>
+          <Mic size={compact ? 11 : 13} className="text-white" />
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: '-0.01em',
-              color: 'var(--text-secondary)',
-              transition: 'color 0.3s ease',
-            }}
-          >
-            VoiceInk
-          </span>
-          {isRecording && (
-            <span style={{
-              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--recording)',
-              animation: 'mic-recording 1.3s ease-in-out infinite',
-            }}>
-              ● Rec
-            </span>
-          )}
-          {isProcessing && (
-            <span style={{
-              fontSize: 9.5, fontWeight: 600, letterSpacing: '0.04em',
-              color: 'var(--processing)', opacity: 0.9,
-            }}>
-              ···
-            </span>
-          )}
-        </div>
+        <span className={`font-semibold tracking-tight ${compact ? 'text-[12px]' : ''}`}>VoiceInk</span>
+        {!compact && <span className="text-[11px] text-white/30 ml-1">· Dictée IA</span>}
       </div>
-
-      {/* Window controls */}
-      <div className="titlebar-no-drag flex items-center" style={{ gap: 2 }}>
+      <div className={`no-drag flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
         <button
-          onClick={() => window.voiceink?.minimize()}
-          className="icon-btn"
-          style={{ width: 28, height: 24, borderRadius: 6 }}
-          title="Réduire"
+          className={`grid place-items-center rounded hover:bg-white/10 ${settings.alwaysOnTop ? 'text-fuchsia-300' : 'text-white/60 hover:text-white'} ${compact ? 'w-7 h-6' : 'w-8 h-7'}`}
+          onClick={toggleOnTop}
+          title={settings.alwaysOnTop ? 'Ne plus épingler au premier plan' : 'Épingler au premier plan'}
         >
-          <Minus size={11} strokeWidth={2} />
+          {settings.alwaysOnTop ? <Pin size={12} /> : <PinOff size={12} />}
         </button>
         <button
-          onClick={() => window.voiceink?.quit()}
-          className="icon-btn"
-          style={{ width: 28, height: 24, borderRadius: 6 }}
-          title="Quitter"
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(244,63,94,0.1)';
-            e.currentTarget.style.color = 'var(--recording)';
-            e.currentTarget.style.borderColor = 'rgba(244,63,94,0.2)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '';
-            e.currentTarget.style.color = '';
-            e.currentTarget.style.borderColor = '';
-          }}
+          className={`grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-8 h-7'}`}
+          onClick={goPill}
+          title="Passer en mode pilule flottante"
         >
-          <X size={11} strokeWidth={2} />
+          <Minimize2 size={12} />
+        </button>
+        <div className="w-2" />
+        <button className={`grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowMinimize()} title="Réduire">
+          <Minus size={compact ? 12 : 14} />
+        </button>
+        {!compact && (
+          <button className="w-9 h-7 grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white" onClick={() => api?.windowMaximize()} title="Agrandir">
+            <Square size={12} />
+          </button>
+        )}
+        <button className={`grid place-items-center rounded hover:bg-rose-500/80 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowClose()} title="Fermer">
+          <X size={compact ? 12 : 14} />
         </button>
       </div>
     </div>

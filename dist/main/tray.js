@@ -1,128 +1,79 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TrayManager = void 0;
+exports.createTray = createTray;
 const electron_1 = require("electron");
-const path = __importStar(require("path"));
-class TrayManager {
-    tray = null;
-    mainWindow;
-    configService;
-    constructor(mainWindow, configService) {
-        this.mainWindow = mainWindow;
-        this.configService = configService;
+const path_1 = require("path");
+const fs_1 = require("fs");
+const types_1 = require("../shared/types");
+let tray = null;
+function createTray(getWin) {
+    const iconPath = resolveIconPath();
+    let image;
+    try {
+        image = electron_1.nativeImage.createFromPath(iconPath);
+        if (image.isEmpty())
+            image = electron_1.nativeImage.createEmpty();
     }
-    create() {
-        const iconPath = path.join(__dirname, '../../assets/tray-icon.png');
-        let icon;
-        try {
-            icon = electron_1.nativeImage.createFromPath(iconPath);
-            if (icon.isEmpty()) {
-                icon = electron_1.nativeImage.createEmpty();
-            }
-        }
-        catch {
-            icon = electron_1.nativeImage.createEmpty();
-        }
-        this.tray = new electron_1.Tray(icon);
-        this.tray.setToolTip('VoiceInk - Dictée Intelligente');
-        this.updateMenu();
-        this.tray.on('click', () => {
-            if (this.mainWindow.isVisible()) {
-                this.mainWindow.hide();
-            }
-            else {
-                this.mainWindow.show();
-                this.mainWindow.focus();
-            }
-        });
+    catch {
+        image = electron_1.nativeImage.createEmpty();
     }
-    updateMenu() {
-        if (!this.tray)
+    tray = new electron_1.Tray(image);
+    tray.setToolTip('VoiceInk — Dictée IA');
+    const menu = electron_1.Menu.buildFromTemplate([
+        {
+            label: 'Afficher VoiceInk',
+            click: () => {
+                const w = getWin();
+                if (w) {
+                    w.show();
+                    w.focus();
+                }
+            },
+        },
+        {
+            label: 'Démarrer / Arrêter dictée',
+            click: () => {
+                const w = getWin();
+                // Do not show/focus the window: otherwise the auto-injection paste
+                // would land in VoiceInk itself instead of the user's current app.
+                if (w)
+                    w.webContents.send(types_1.IPC.ON_TOGGLE_RECORDING);
+            },
+        },
+        { type: 'separator' },
+        {
+            label: 'Quitter',
+            click: () => {
+                electron_1.app.isQuitting = true;
+                electron_1.app.quit();
+            },
+        },
+    ]);
+    tray.setContextMenu(menu);
+    tray.on('click', () => {
+        const w = getWin();
+        if (!w)
             return;
-        const contextMenu = electron_1.Menu.buildFromTemplate([
-            {
-                label: 'Afficher VoiceInk',
-                click: () => {
-                    this.mainWindow.show();
-                    this.mainWindow.focus();
-                },
-            },
-            { type: 'separator' },
-            {
-                label: '🎙️ Démarrer la dictée',
-                click: () => {
-                    this.mainWindow.webContents.send('app:toggle-recording');
-                },
-            },
-            { type: 'separator' },
-            {
-                label: 'Paramètres',
-                click: () => {
-                    this.mainWindow.show();
-                    this.mainWindow.webContents.send('navigate', 'settings');
-                },
-            },
-            {
-                label: 'Historique',
-                click: () => {
-                    this.mainWindow.show();
-                    this.mainWindow.webContents.send('navigate', 'history');
-                },
-            },
-            { type: 'separator' },
-            {
-                label: 'Quitter',
-                click: () => {
-                    this.mainWindow.removeAllListeners('close');
-                    electron_1.app.quit();
-                },
-            },
-        ]);
-        this.tray.setContextMenu(contextMenu);
-    }
-    setRecording(isRecording) {
-        if (this.tray) {
-            this.tray.setToolTip(isRecording ? 'VoiceInk - Enregistrement en cours...' : 'VoiceInk - Dictée Intelligente');
+        if (w.isVisible())
+            w.hide();
+        else {
+            w.show();
+            w.focus();
         }
-    }
-    destroy() {
-        if (this.tray) {
-            this.tray.destroy();
-            this.tray = null;
-        }
-    }
+    });
+    return tray;
 }
-exports.TrayManager = TrayManager;
+function resolveIconPath() {
+    const candidates = [
+        (0, path_1.join)(process.resourcesPath || '', 'assets', 'icon.png'),
+        (0, path_1.join)(__dirname, '..', '..', 'assets', 'icon.png'),
+        (0, path_1.join)(__dirname, '..', '..', 'assets', 'icon.svg'),
+        (0, path_1.join)(process.cwd(), 'assets', 'icon.png'),
+        (0, path_1.join)(process.cwd(), 'assets', 'icon.svg'),
+    ];
+    for (const c of candidates) {
+        if (c && (0, fs_1.existsSync)(c))
+            return c;
+    }
+    return '';
+}

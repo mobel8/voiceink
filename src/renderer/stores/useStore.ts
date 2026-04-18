@@ -1,214 +1,98 @@
 import { create } from 'zustand';
-import type {
-  RecordingState,
-  PipelineStatus,
-  ProcessingMode,
-  AppSettings,
-  HistoryEntry,
-  ChatMessage,
-} from '@shared/types';
+import { Settings, DEFAULT_SETTINGS, HistoryEntry } from '../../shared/types';
 
-type View = 'main' | 'settings' | 'history' | 'file' | 'chat';
+export type View = 'main' | 'history' | 'settings';
+export type RecState = 'idle' | 'recording' | 'processing' | 'error';
 
-interface Toast {
-  id: string;
-  type: 'success' | 'error' | 'info';
-  message: string;
-  duration?: number;
+/**
+ * Read the density the main process baked into the URL hash when it
+ * created this window (`#compact` or `#comfortable`). Returning it here
+ * lets the very first React render pick the right layout, so there is no
+ * one-frame flash of the comfortable UI inside a 176x52 pill window
+ * during a comfortable → compact swap.
+ */
+function initialDensity(): Settings['density'] {
+  if (typeof location === 'undefined') return DEFAULT_SETTINGS.density;
+  const h = (location.hash || '').replace('#', '');
+  if (h === 'compact' || h === 'comfortable') return h;
+  return DEFAULT_SETTINGS.density;
 }
 
-interface ResultBubble {
-  text: string;
-  mode: string;
-}
+/**
+ * Seed settings with the URL-hash density so the initial render matches
+ * the window's actual size. Everything else stays at defaults until
+ * `loadSettings()` finishes (~1 IPC round-trip, <10 ms).
+ */
+const INITIAL_SETTINGS: Settings = {
+  ...DEFAULT_SETTINGS,
+  density: initialDensity(),
+};
 
-interface AppState {
-  // View
-  currentView: View;
-  setView: (view: View) => void;
-  compactMode: boolean;
-  setCompactMode: (v: boolean) => void;
-  panelExpanded: boolean;
-  setPanelExpanded: (v: boolean) => void;
-  resultBubble: ResultBubble | null;
-  setResultBubble: (b: ResultBubble | null) => void;
-  compactStyle: 'purple' | 'cyan' | 'green' | 'rose' | 'white';
-  setCompactStyle: (s: 'purple' | 'cyan' | 'green' | 'rose' | 'white') => void;
-  compactVisualization: 'radial' | 'waveform' | 'oscillogram';
-  setCompactVisualization: (v: 'radial' | 'waveform' | 'oscillogram') => void;
-  theme: 'dark' | 'light';
-  setTheme: (t: 'dark' | 'light') => void;
+interface State {
+  view: View;
+  setView: (v: View) => void;
 
-  // Recording
-  recordingState: RecordingState;
-  setRecordingState: (state: RecordingState) => void;
-  audioLevel: number;
-  setAudioLevel: (level: number) => void;
+  settings: Settings;
+  loadSettings: () => Promise<void>;
+  updateSettings: (patch: Partial<Settings>) => Promise<void>;
 
-  // Pipeline
-  pipelineStatus: PipelineStatus;
-  setPipelineStatus: (status: PipelineStatus) => void;
-
-  // Transcription
-  currentText: string;
-  setCurrentText: (text: string) => void;
-  processedText: string;
-  setProcessedText: (text: string) => void;
-  partialText: string;
-  setPartialText: (text: string) => void;
-
-  // LLM Streaming
-  llmStreamText: string;
-  setLlmStreamText: (text: string) => void;
-  appendLlmStreamToken: (token: string) => void;
-  isLlmStreaming: boolean;
-  setIsLlmStreaming: (v: boolean) => void;
-
-  // Timing
-  recordingStartTime: number | null;
-  setRecordingStartTime: (t: number | null) => void;
-  lastTranscriptionMs: number | null;
-  setLastTranscriptionMs: (ms: number | null) => void;
-
-  // Mode
-  selectedMode: ProcessingMode;
-  setSelectedMode: (mode: ProcessingMode) => void;
-
-  // Language
-  selectedLanguage: string;
-  setSelectedLanguage: (lang: string) => void;
-  targetLanguage: string;
-  setTargetLanguage: (lang: string) => void;
-
-  // Settings
-  settings: AppSettings | null;
-  setSettings: (settings: AppSettings) => void;
-
-  // History
   history: HistoryEntry[];
-  setHistory: (history: HistoryEntry[]) => void;
+  loadHistory: () => Promise<void>;
+  removeHistory: (id: string) => Promise<void>;
+  clearHistory: () => Promise<void>;
 
-  // Model
-  modelReady: boolean;
-  setModelReady: (ready: boolean) => void;
-  modelDownloadProgress: number;
-  setModelDownloadProgress: (progress: number) => void;
+  recState: RecState;
+  setRecState: (s: RecState) => void;
+  lastTranscript: string;
+  setLastTranscript: (t: string) => void;
+  lastLatencyMs: number;
+  setLastLatencyMs: (n: number) => void;
+  lastError: string;
+  setLastError: (e: string) => void;
 
-  // Toasts
-  toasts: Toast[];
-  addToast: (toast: Omit<Toast, 'id'>) => void;
-  removeToast: (id: string) => void;
-
-  // Chat
-  chatMessages: ChatMessage[];
-  addChatMessage: (msg: ChatMessage) => void;
-  updateLastAssistantMessage: (content: string) => void;
-  clearChat: () => void;
-  isChatStreaming: boolean;
-  setIsChatStreaming: (v: boolean) => void;
+  audioLevel: number; // 0..1 live RMS
+  setAudioLevel: (n: number) => void;
 }
 
-let toastId = 0;
+declare global { interface Window { voiceink: any } }
 
-export const useStore = create<AppState>((set) => ({
-  // View
-  currentView: 'main',
-  setView: (view) => set({ currentView: view }),
-  compactMode: true,
-  setCompactMode: (v) => set({ compactMode: v }),
-  panelExpanded: false,
-  setPanelExpanded: (v) => set({ panelExpanded: v }),
-  resultBubble: null,
-  setResultBubble: (b) => set({ resultBubble: b }),
-  compactStyle: 'purple',
-  setCompactStyle: (s) => set({ compactStyle: s }),
-  compactVisualization: 'radial',
-  setCompactVisualization: (v) => set({ compactVisualization: v }),
-  theme: 'dark',
-  setTheme: (t) => set({ theme: t }),
+export const useStore = create<State>()((set, get) => ({
+  view: 'main',
+  setView: (v) => set({ view: v }),
 
-  // Recording
-  recordingState: 'idle',
-  setRecordingState: (state) => set({ recordingState: state }),
-  audioLevel: 0,
-  setAudioLevel: (level) => set({ audioLevel: level }),
+  settings: INITIAL_SETTINGS,
+  loadSettings: async () => {
+    const s = await window.voiceink.getSettings();
+    set({ settings: s });
+  },
+  updateSettings: async (patch) => {
+    const next = await window.voiceink.setSettings(patch);
+    set({ settings: next });
+  },
 
-  // Pipeline
-  pipelineStatus: { state: 'idle', message: 'Prêt' },
-  setPipelineStatus: (status) => set({ pipelineStatus: status }),
-
-  // Transcription
-  currentText: '',
-  setCurrentText: (text) => set({ currentText: text }),
-  processedText: '',
-  setProcessedText: (text) => set({ processedText: text }),
-  partialText: '',
-  setPartialText: (text) => set({ partialText: text }),
-
-  // LLM Streaming
-  llmStreamText: '',
-  setLlmStreamText: (text) => set({ llmStreamText: text }),
-  appendLlmStreamToken: (token) => set((state) => ({ llmStreamText: state.llmStreamText + token })),
-  isLlmStreaming: false,
-  setIsLlmStreaming: (v) => set({ isLlmStreaming: v }),
-
-  // Timing
-  recordingStartTime: null,
-  setRecordingStartTime: (t) => set({ recordingStartTime: t }),
-  lastTranscriptionMs: null,
-  setLastTranscriptionMs: (ms) => set({ lastTranscriptionMs: ms }),
-
-  // Mode
-  selectedMode: 'raw',
-  setSelectedMode: (mode) => set({ selectedMode: mode }),
-
-  // Language
-  selectedLanguage: 'fr',
-  setSelectedLanguage: (lang) => set({ selectedLanguage: lang }),
-  targetLanguage: '',
-  setTargetLanguage: (lang) => set({ targetLanguage: lang }),
-
-  // Settings
-  settings: null,
-  setSettings: (settings) => set({ settings }),
-
-  // History
   history: [],
-  setHistory: (history) => set({ history }),
+  loadHistory: async () => {
+    const h = await window.voiceink.getHistory();
+    set({ history: h });
+  },
+  removeHistory: async (id) => {
+    await window.voiceink.deleteHistory(id);
+    await get().loadHistory();
+  },
+  clearHistory: async () => {
+    await window.voiceink.clearHistory();
+    set({ history: [] });
+  },
 
-  // Model
-  modelReady: false,
-  setModelReady: (ready) => set({ modelReady: ready }),
-  modelDownloadProgress: 0,
-  setModelDownloadProgress: (progress) => set({ modelDownloadProgress: progress }),
+  recState: 'idle',
+  setRecState: (s) => set({ recState: s }),
+  lastTranscript: '',
+  setLastTranscript: (t) => set({ lastTranscript: t }),
+  lastLatencyMs: 0,
+  setLastLatencyMs: (n) => set({ lastLatencyMs: n }),
+  lastError: '',
+  setLastError: (e) => set({ lastError: e }),
 
-  // Toasts
-  toasts: [],
-  addToast: (toast) =>
-    set((state) => ({
-      toasts: [...state.toasts, { ...toast, id: String(++toastId) }],
-    })),
-  removeToast: (id) =>
-    set((state) => ({
-      toasts: state.toasts.filter((t) => t.id !== id),
-    })),
-
-  // Chat
-  chatMessages: [],
-  addChatMessage: (msg) =>
-    set((state) => ({ chatMessages: [...state.chatMessages, msg] })),
-  updateLastAssistantMessage: (content) =>
-    set((state) => {
-      const msgs = [...state.chatMessages];
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === 'assistant') {
-          msgs[i] = { ...msgs[i], content: msgs[i].content + content };
-          break;
-        }
-      }
-      return { chatMessages: msgs };
-    }),
-  clearChat: () => set({ chatMessages: [] }),
-  isChatStreaming: false,
-  setIsChatStreaming: (v) => set({ isChatStreaming: v }),
+  audioLevel: 0,
+  setAudioLevel: (n) => set({ audioLevel: n }),
 }));

@@ -1,40 +1,62 @@
-// Runtime constants for the renderer process
-// These are duplicated from src/shared/types.ts to avoid cross-directory
-// module resolution issues with Vite's dev server.
+import { Mode } from '../../shared/types';
 
-type ProcessingMode =
-  | 'raw'
-  | 'email'
-  | 'short_message'
-  | 'meeting_notes'
-  | 'summary'
-  | 'formal'
-  | 'simplified'
-  | 'custom';
+export const MODE_LABELS: Record<Mode, { label: string; desc: string; icon: string }> = {
+  raw: { label: 'Brut', desc: 'Texte tel quel, sans retouche', icon: '✒️' },
+  email: { label: 'Email', desc: 'Email professionnel clair', icon: '✉️' },
+  message: { label: 'Message', desc: 'Message court et naturel', icon: '💬' },
+  meeting: { label: 'Réunion', desc: 'Notes structurées', icon: '📝' },
+  summary: { label: 'Résumé', desc: 'Synthèse concise', icon: '📄' },
+  formal: { label: 'Formel', desc: 'Registre soutenu', icon: '🎩' },
+  simple: { label: 'Simple', desc: 'Clair et accessible', icon: '🌱' },
+};
 
 export const SUPPORTED_LANGUAGES = [
-  { code: 'fr', name: 'Français' },
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Español' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'pt', name: 'Português' },
-  { code: 'nl', name: 'Nederlands' },
-  { code: 'pl', name: 'Polski' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'ja', name: '日本語' },
-  { code: 'zh', name: '中文' },
-  { code: 'ko', name: '한국어' },
-  { code: 'ar', name: 'العربية' },
-] as const;
+  { code: 'auto', label: 'Détection auto' },
+  { code: 'fr', label: 'Français' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'pt', label: 'Português' },
+  { code: 'nl', label: 'Nederlands' },
+  { code: 'pl', label: 'Polski' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'ja', label: '日本語' },
+  { code: 'zh', label: '中文' },
+  { code: 'ko', label: '한국어' },
+  { code: 'ar', label: 'العربية' },
+];
 
-export const MODE_LABELS: Record<ProcessingMode, string> = {
-  raw: 'Texte brut',
-  email: 'Email professionnel',
-  short_message: 'Message court',
-  meeting_notes: 'Notes de réunion',
-  summary: 'Résumé',
-  formal: 'Reformulation formelle',
-  simplified: 'Reformulation simplifiée',
-  custom: 'Mode personnalisé',
+export const GROQ_STT_MODELS = [
+  { id: 'whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo (rapide, recommandé)' },
+  { id: 'whisper-large-v3', label: 'Whisper Large v3 (précis)' },
+  { id: 'distil-whisper-large-v3-en', label: 'Distil Whisper (anglais only)' },
+];
+
+/**
+ * Targets available for automatic translation. Empty code = no translation.
+ * Uses native language names so the user recognises them instantly.
+ */
+export const TRANSLATE_TARGETS = [
+  { code: '',   label: 'Aucune (garder la langue d\'origine)', native: '' },
+  { code: 'fr', label: 'Français',  native: 'Français' },
+  { code: 'en', label: 'English',   native: 'English' },
+  { code: 'es', label: 'Español',   native: 'Español' },
+  { code: 'de', label: 'Deutsch',   native: 'Deutsch' },
+  { code: 'it', label: 'Italiano',  native: 'Italiano' },
+  { code: 'pt', label: 'Português', native: 'Português' },
+  { code: 'nl', label: 'Nederlands',native: 'Nederlands' },
+  { code: 'pl', label: 'Polski',    native: 'Polski' },
+  { code: 'ru', label: 'Русский',   native: 'Русский' },
+  { code: 'ja', label: '日本語',      native: '日本語' },
+  { code: 'zh', label: '中文',       native: '中文' },
+  { code: 'ko', label: '한국어',       native: '한국어' },
+  { code: 'ar', label: 'العربية',     native: 'العربية' },
+];
+
+export const LANGUAGE_NAMES: Record<string, string> = {
+  fr: 'French', en: 'English', es: 'Spanish', de: 'German',
+  it: 'Italian', pt: 'Portuguese', nl: 'Dutch', pl: 'Polish',
+  ru: 'Russian', ja: 'Japanese', zh: 'Chinese', ko: 'Korean',
+  ar: 'Arabic',
 };

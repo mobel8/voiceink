@@ -15,26 +15,20 @@
     "dist": "electron-builder"
   },
   "dependencies": {
-    "@electron/remote": "^2.1.2",
-    "@tailwindcss/oxide-linux-x64-gnu": "^4.2.2",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
-    "sql.js": "^1.11.0",
-    "uuid": "^10.0.0"
+    "koffi": "^2.11.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "lucide-react": "^0.460.0",
-    "postcss": "^8.4.49",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^4.0.0",

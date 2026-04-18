@@ -1,115 +1,115 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC } from '../shared/types';
+// Sandboxed preloads cannot `require()` arbitrary modules — only the
+// electron / events / timers / url whitelist. Everything we need from
+// `src/shared/types` must therefore either be a TYPE (erased at compile
+// time via `import type`) or be inlined here as a literal.
+import type {
+  Settings,
+  TranscribeRequest,
+  TranscribeResponse,
+  HistoryEntry,
+  UsageStats,
+} from '../shared/types';
+
+type ExportFormat = 'json' | 'markdown' | 'txt' | 'csv';
+
+/**
+ * IPC channel names. Must stay in sync with `src/shared/types.ts::IPC`.
+ * We duplicate them here because the preload runs in a sandbox that
+ * cannot resolve local modules.
+ */
+const IPC = {
+  TRANSCRIBE: 'voiceink:transcribe',
+  GET_SETTINGS: 'voiceink:getSettings',
+  SET_SETTINGS: 'voiceink:setSettings',
+  GET_HISTORY: 'voiceink:getHistory',
+  ADD_HISTORY: 'voiceink:addHistory',
+  DELETE_HISTORY: 'voiceink:deleteHistory',
+  CLEAR_HISTORY: 'voiceink:clearHistory',
+  INJECT_TEXT: 'voiceink:injectText',
+  COPY_TEXT: 'voiceink:copyText',
+  EXPORT: 'voiceink:export',
+  ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
+  ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
+  WINDOW_MINIMIZE: 'voiceink:windowMinimize',
+  WINDOW_CLOSE: 'voiceink:windowClose',
+  WINDOW_MAXIMIZE: 'voiceink:windowMaximize',
+  WINDOW_SET_ALWAYS_ON_TOP: 'voiceink:windowSetAlwaysOnTop',
+  WINDOW_RESIZE_FOR_DENSITY: 'voiceink:windowResizeForDensity',
+  WIDGET_CONTEXT_MENU: 'voiceink:widgetContextMenu',
+  TOGGLE_PIN_HISTORY: 'voiceink:togglePinHistory',
+  EXPORT_HISTORY: 'voiceink:exportHistory',
+  GET_USAGE_STATS: 'voiceink:getUsageStats',
+  SET_AUTO_START: 'voiceink:setAutoStart',
+  ON_PTT_DOWN: 'voiceink:onPttDown',
+  ON_PTT_UP: 'voiceink:onPttUp',
+  LOG: 'voiceink:log',
+} as const;
 
 const api = {
-  // Audio
-  getAudioDevices: () => ipcRenderer.invoke(IPC.AUDIO_DEVICES),
-  startAudio: () => ipcRenderer.invoke(IPC.AUDIO_START),
-  stopAudio: () => ipcRenderer.invoke(IPC.AUDIO_STOP),
-  onAudioLevel: (cb: (level: number) => void) => {
-    const handler = (_: any, level: number) => cb(level);
-    ipcRenderer.on(IPC.AUDIO_LEVEL, handler);
-    return () => ipcRenderer.removeListener(IPC.AUDIO_LEVEL, handler);
-  },
+  getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.GET_SETTINGS),
+  setSettings: (patch: Partial<Settings>): Promise<Settings> =>
+    ipcRenderer.invoke(IPC.SET_SETTINGS, patch),
 
-  // STT
-  transcribe: (audioPath: string, language?: string) => ipcRenderer.invoke(IPC.STT_TRANSCRIBE, audioPath, language),
-  transcribeFileSTT: (filePath: string) => ipcRenderer.invoke(IPC.STT_TRANSCRIBE_FILE, filePath),
-  onSTTResult: (cb: (result: any) => void) => {
-    const handler = (_: any, result: any) => cb(result);
-    ipcRenderer.on(IPC.STT_RESULT, handler);
-    return () => ipcRenderer.removeListener(IPC.STT_RESULT, handler);
-  },
-  onSTTPartial: (cb: (text: string) => void) => {
-    const handler = (_: any, text: string) => cb(text);
-    ipcRenderer.on(IPC.STT_PARTIAL, handler);
-    return () => ipcRenderer.removeListener(IPC.STT_PARTIAL, handler);
-  },
-  onSTTStatus: (cb: (status: string) => void) => {
-    const handler = (_: any, status: string) => cb(status);
-    ipcRenderer.on(IPC.STT_STATUS, handler);
-    return () => ipcRenderer.removeListener(IPC.STT_STATUS, handler);
-  },
-  downloadModel: (model: string) => ipcRenderer.invoke(IPC.STT_DOWNLOAD_MODEL, model),
-  onModelProgress: (cb: (progress: number) => void) => {
-    const handler = (_: any, progress: number) => cb(progress);
-    ipcRenderer.on(IPC.STT_MODEL_PROGRESS, handler);
-    return () => ipcRenderer.removeListener(IPC.STT_MODEL_PROGRESS, handler);
-  },
+  transcribe: (req: TranscribeRequest): Promise<TranscribeResponse> =>
+    ipcRenderer.invoke(IPC.TRANSCRIBE, req),
 
-  // LLM
-  processText: (text: string, mode: string, targetLang?: string) => ipcRenderer.invoke(IPC.LLM_PROCESS, text, mode, targetLang),
-  onLLMResult: (cb: (result: any) => void) => {
-    const handler = (_: any, result: any) => cb(result);
-    ipcRenderer.on(IPC.LLM_RESULT, handler);
-    return () => ipcRenderer.removeListener(IPC.LLM_RESULT, handler);
-  },
-  onLLMStream: (cb: (chunk: string) => void) => {
-    const handler = (_: any, chunk: string) => cb(chunk);
-    ipcRenderer.on(IPC.LLM_STREAM, handler);
-    return () => ipcRenderer.removeListener(IPC.LLM_STREAM, handler);
-  },
-  onLLMStatus: (cb: (status: string) => void) => {
-    const handler = (_: any, status: string) => cb(status);
-    ipcRenderer.on(IPC.LLM_STATUS, handler);
-    return () => ipcRenderer.removeListener(IPC.LLM_STATUS, handler);
-  },
+  getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IPC.GET_HISTORY),
+  deleteHistory: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DELETE_HISTORY, id),
+  clearHistory: (): Promise<void> => ipcRenderer.invoke(IPC.CLEAR_HISTORY),
+  togglePinHistory: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.TOGGLE_PIN_HISTORY, id),
+  exportHistory: (format: ExportFormat): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.EXPORT_HISTORY, format),
+  getUsageStats: (): Promise<UsageStats> => ipcRenderer.invoke(IPC.GET_USAGE_STATS),
 
-  // Injection
-  injectText: (text: string) => ipcRenderer.invoke(IPC.INJECT_TEXT, text),
-  copyToClipboard: (text: string) => ipcRenderer.invoke(IPC.INJECT_CLIPBOARD, text),
+  setAutoStart: (enabled: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.SET_AUTO_START, enabled),
 
-  // History
-  getHistory: (filter: any) => ipcRenderer.invoke(IPC.HISTORY_GET, filter),
-  searchHistory: (query: string) => ipcRenderer.invoke(IPC.HISTORY_SEARCH, query),
-  deleteHistory: (id: string) => ipcRenderer.invoke(IPC.HISTORY_DELETE, id),
-  exportHistory: (id: string, format: string) => ipcRenderer.invoke(IPC.HISTORY_EXPORT, id, format),
-  addTag: (id: string, tag: string) => ipcRenderer.invoke(IPC.HISTORY_ADD_TAG, id, tag),
-  removeTag: (id: string, tag: string) => ipcRenderer.invoke(IPC.HISTORY_REMOVE_TAG, id, tag),
+  copyText: (text: string): Promise<void> => ipcRenderer.invoke(IPC.COPY_TEXT, text),
+  injectText: (text: string): Promise<void> => ipcRenderer.invoke(IPC.INJECT_TEXT, text),
 
-  // Settings
-  getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET),
-  setSettings: (settings: any) => ipcRenderer.invoke(IPC.SETTINGS_SET, settings),
-  resetSettings: () => ipcRenderer.invoke(IPC.SETTINGS_RESET),
-
-  // App
-  quit: () => ipcRenderer.send(IPC.APP_QUIT),
-  minimize: () => ipcRenderer.send(IPC.APP_MINIMIZE),
-  toggleRecording: () => ipcRenderer.send(IPC.APP_TOGGLE_RECORDING),
-  setCompactMode: (compact: boolean, width?: number, height?: number) => ipcRenderer.invoke(IPC.APP_COMPACT_MODE, compact, width, height),
-  setOrbPosition: (x: number, y: number) => ipcRenderer.invoke(IPC.APP_SET_ORB_POSITION, x, y),
-  getOrbPosition: () => ipcRenderer.invoke(IPC.APP_GET_ORB_POSITION),
   onToggleRecording: (cb: () => void) => {
-    const handler = () => cb();
-    ipcRenderer.on(IPC.APP_TOGGLE_RECORDING, handler);
-    return () => ipcRenderer.removeListener(IPC.APP_TOGGLE_RECORDING, handler);
+    const listener = () => cb();
+    ipcRenderer.on(IPC.ON_TOGGLE_RECORDING, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_TOGGLE_RECORDING, listener);
   },
-  onRecordingState: (cb: (state: string) => void) => {
-    const handler = (_: any, state: string) => cb(state);
-    ipcRenderer.on(IPC.APP_RECORDING_STATE, handler);
-    return () => ipcRenderer.removeListener(IPC.APP_RECORDING_STATE, handler);
+  onPttDown: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on(IPC.ON_PTT_DOWN, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_PTT_DOWN, listener);
   },
-  onPipelineStatus: (cb: (status: any) => void) => {
-    const handler = (_: any, status: any) => cb(status);
-    ipcRenderer.on(IPC.APP_PIPELINE_STATUS, handler);
-    return () => ipcRenderer.removeListener(IPC.APP_PIPELINE_STATUS, handler);
-  },
-
-  // Chat
-  sendChat: (messages: any[]) => ipcRenderer.invoke(IPC.CHAT_SEND, messages),
-  onChatStream: (cb: (token: string) => void) => {
-    const handler = (_: any, token: string) => cb(token);
-    ipcRenderer.on(IPC.CHAT_STREAM, handler);
-    return () => ipcRenderer.removeListener(IPC.CHAT_STREAM, handler);
+  onPttUp: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on(IPC.ON_PTT_UP, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_PTT_UP, listener);
   },
 
-  // File
-  openFile: () => ipcRenderer.invoke(IPC.FILE_OPEN),
-  transcribeFile: (filePath: string) => ipcRenderer.invoke(IPC.FILE_TRANSCRIBE, filePath),
-  exportFile: (id: string, format: string, outputPath: string) =>
-    ipcRenderer.invoke(IPC.FILE_EXPORT, id, format, outputPath),
+  windowMinimize: () => ipcRenderer.invoke(IPC.WINDOW_MINIMIZE),
+  windowMaximize: () => ipcRenderer.invoke(IPC.WINDOW_MAXIMIZE),
+  windowClose: () => ipcRenderer.invoke(IPC.WINDOW_CLOSE),
+  windowSetAlwaysOnTop: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC.WINDOW_SET_ALWAYS_ON_TOP, enabled),
+  windowResizeForDensity: (density: 'comfortable' | 'compact') =>
+    ipcRenderer.invoke(IPC.WINDOW_RESIZE_FOR_DENSITY, density),
+  showWidgetContextMenu: () => ipcRenderer.invoke(IPC.WIDGET_CONTEXT_MENU),
+
+  onOpenSettings: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('voiceink:openSettings', listener);
+    return () => ipcRenderer.removeListener('voiceink:openSettings', listener);
+  },
+
+  log: (...args: unknown[]) => ipcRenderer.invoke(IPC.LOG, ...args),
+
+  /**
+   * Fire-and-forget "renderer has rendered its first real frame" signal.
+   * Main process uses this to gate window-visibility swaps during a
+   * density hot-swap, so the new window never appears while it's still
+   * painting the (possibly wrong-for-its-size) shell frame.
+   */
+  rendererReady: () => ipcRenderer.send('voiceink:renderer-ready'),
 };
 
-export type VoiceInkAPI = typeof api;
-
 contextBridge.exposeInMainWorld('voiceink', api);
+
+export type VoiceInkAPI = typeof api;

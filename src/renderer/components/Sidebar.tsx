@@ -1,124 +1,55 @@
-import React from 'react';
-import { Mic, Settings, Clock, FileAudio, MessageSquare } from 'lucide-react';
-import { useStore } from '../stores/useStore';
+import { Mic, History, Settings, Sparkles, Languages } from 'lucide-react';
+import { useStore, View } from '../stores/useStore';
+import { TRANSLATE_TARGETS } from '../lib/constants';
 
-const NAV = [
-  { id: 'main'     as const, Icon: Mic,           label: 'Dictée'      },
-  { id: 'chat'     as const, Icon: MessageSquare,  label: 'Chat IA'     },
-  { id: 'file'     as const, Icon: FileAudio,      label: 'Fichier'     },
-  { id: 'history'  as const, Icon: Clock,          label: 'Historique'  },
+const NAV: { id: View; label: string; Icon: any }[] = [
+  { id: 'main', label: 'Dictée', Icon: Mic },
+  { id: 'history', label: 'Historique', Icon: History },
+  { id: 'settings', label: 'Paramètres', Icon: Settings },
 ];
 
 export function Sidebar() {
-  const { currentView, setView, recordingState } = useStore();
-
-  const renderBtn = (
-    id: string,
-    Icon: React.ElementType,
-    label: string,
-    isActive: boolean,
-  ) => (
-    <button
-      key={id}
-      onClick={() => setView(id as any)}
-      title={label}
-      className="group relative flex items-center justify-center transition-smooth"
-      style={{
-        width: 40, height: 40,
-        borderRadius: 11,
-        background:   isActive ? 'var(--accent-subtle)' : 'transparent',
-        color:        isActive ? 'var(--accent)'        : 'var(--text-muted)',
-        border:       isActive ? '1px solid var(--pill-active-border)' : '1px solid transparent',
-        boxShadow:    isActive ? '0 0 16px rgba(139,120,255,0.12)' : 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'var(--hover-bg)';
-          e.currentTarget.style.color      = 'var(--text-secondary)';
-          e.currentTarget.style.borderColor = 'var(--border)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color      = 'var(--text-muted)';
-          e.currentTarget.style.borderColor = 'transparent';
-        }
-      }}
-    >
-      <Icon size={16} strokeWidth={isActive ? 2 : 1.5} />
-
-      {/* Active accent bar */}
-      {isActive && (
-        <div
-          style={{
-            position: 'absolute', left: -1, top: '50%', transform: 'translateY(-50%)',
-            width: 2.5, height: 18, borderRadius: '0 3px 3px 0',
-            background: 'var(--accent)',
-            boxShadow: '0 0 10px var(--accent-glow)',
-          }}
-        />
-      )}
-
-      {/* Recording dot */}
-      {id === 'main' && recordingState === 'recording' && (
-        <div
-          style={{
-            position: 'absolute', top: 5, right: 5,
-            width: 5, height: 5, borderRadius: '50%',
-            background: 'var(--recording)',
-            boxShadow: '0 0 8px var(--recording)',
-            animation: 'mic-recording 1.3s ease-in-out infinite',
-          }}
-        />
-      )}
-
-      {/* Tooltip */}
-      <div
-        className="tooltip-animate pointer-events-none absolute left-full z-50 opacity-0 group-hover:opacity-100"
-        style={{ marginLeft: 10 }}
-      >
-        <div
-          className="glass-card"
-          style={{
-            padding: '5px 10px', borderRadius: 8,
-            fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap',
-            color: 'var(--text-primary)', letterSpacing: '-0.01em',
-          }}
-        >
-          {label}
-        </div>
-      </div>
-    </button>
-  );
+  const { view, setView, settings } = useStore();
+  const hasKey = !!settings.groqApiKey;
+  const translateLabel = TRANSLATE_TARGETS.find((t) => t.code === settings.translateTo)?.native;
 
   return (
-    <nav
-      style={{
-        width: 56,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '10px 0',
-        gap: 3,
-        background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-subtle)',
-        flexShrink: 0,
-      }}
-    >
-      {NAV.map(({ id, Icon, label }) =>
-        renderBtn(id, Icon, label, currentView === id),
-      )}
+    <aside className="w-52 shrink-0 flex flex-col border-r border-white/5 bg-black/20 p-3 gap-1">
+      <div className="px-2 py-2">
+        <div className="text-[10px] uppercase tracking-widest text-white/40 font-semibold">Navigation</div>
+      </div>
+      {NAV.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          className={`nav-item ${view === id ? 'active' : ''}`}
+          onClick={() => setView(id)}
+        >
+          <Icon size={15} />
+          <span>{label}</span>
+        </button>
+      ))}
 
-      {/* Spacer + separator */}
-      <div style={{ flex: 1 }} />
-      <div
-        style={{
-          width: 22, height: 1, marginBottom: 4,
-          background: 'var(--border)', borderRadius: 1,
-        }}
-      />
-      {renderBtn('settings', Settings, 'Paramètres', currentView === 'settings')}
-    </nav>
+      <div className="mt-auto space-y-2">
+        {translateLabel && (
+          <div className="glass rounded-xl px-3 py-2 text-xs flex items-center gap-2">
+            <Languages size={12} className="text-fuchsia-300 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-white/50 text-[10px] uppercase tracking-wide">Traduction</div>
+              <div className="text-white/90 truncate">→ {translateLabel}</div>
+            </div>
+          </div>
+        )}
+        <div className="glass rounded-xl p-3 text-xs">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Sparkles size={12} className="text-fuchsia-400" />
+            <span className="font-semibold">Moteur STT</span>
+          </div>
+          <div className="text-white/60 text-[11px]">Groq Whisper Turbo</div>
+          <div className={`badge mt-1.5 !text-[10px] ${hasKey ? 'badge-green' : 'badge-amber'}`}>
+            {hasKey ? '● Connecté' : '● Clé manquante'}
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
