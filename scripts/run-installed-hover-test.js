@@ -1,22 +1,20 @@
 /**
  * Regression test that runs against the ACTUAL INSTALLED VoiceInk.exe,
- * not the dev loopback. Reproduces the exact path the user takes when
- * they double-click the desktop shortcut while persisted settings
- * disagree with the window main creates:
+ * not the dev loopback.
  *
- *   - Force compact so main opens a 176×55 pill even if the saved
- *     `density` is 'comfortable' (which used to be the bug trigger).
- *   - Drive CDP Input.dispatchMouseEvent at the dot, the halo, and
- *     the hidden mic / expand button footprints.
- *   - Assert:
- *       dot hover       → pill-full opacity 1  (expanded)
- *       halo ±18 px hover → expanded
- *       mic-area hover  → pill-full opacity 0  (retracted)
- *       expand-area hover → retracted
+ * Current UX contract — "hover-anywhere expands":
+ *   - The pill window is 176×55. Hovering ANY pixel inside that
+ *     window (including the invisible mic/expand button footprints
+ *     and the transparent corners) must expand the pill.
+ *   - Leaving the window collapses it back.
  *
- * Failing any of the above surfaces a mismatch between the view React
- * actually mounts and the window main actually sized — which is what
- * the user was seeing on their desktop.
+ * We drive CDP Input.dispatchMouseEvent to each probe point and check
+ * getComputedStyle(.pill-full).opacity to tell expanded from retracted.
+ *
+ * Force VOICEINK_FORCE_DENSITY=compact so main opens a 176×55 pill
+ * regardless of what the persisted `density` says — that also exercises
+ * the density-pinning fix in useStore (mismatched hash vs. saved
+ * density must NOT swap the CompactView for the MainView mid-session).
  */
 const { spawn, execSync } = require('child_process');
 const path = require('path');
@@ -160,15 +158,15 @@ async function evalJS(cdp, js) {
 
     const cx = geom.cap.x, cy = geom.cap.y;
     const probes = [
-      { name: 'dot-centre',        x: cx,      y: cy,      expect: 'expand' },
-      { name: 'halo-left',         x: cx - 18, y: cy,      expect: 'expand' },
-      { name: 'halo-right',        x: cx + 18, y: cy,      expect: 'expand' },
-      { name: 'halo-top',          x: cx,      y: cy - 12, expect: 'expand' },
-      { name: 'halo-bottom',       x: cx,      y: cy + 12, expect: 'expand' },
-      { name: 'mic-area',          x: 22,      y: cy,      expect: 'retract' },
-      { name: 'expand-area',       x: geom.v.w - 22, y: cy, expect: 'retract' },
-      { name: 'top-left-corner',   x: 4,       y: 4,       expect: 'retract' },
-      { name: 'bottom-right-corner', x: geom.v.w - 4, y: geom.v.h - 4, expect: 'retract' },
+      { name: 'dot-centre',          x: cx,             y: cy,             expect: 'expand' },
+      { name: 'near-dot-left',       x: cx - 18,        y: cy,             expect: 'expand' },
+      { name: 'near-dot-right',      x: cx + 18,        y: cy,             expect: 'expand' },
+      { name: 'near-dot-top',        x: cx,             y: cy - 12,        expect: 'expand' },
+      { name: 'near-dot-bottom',     x: cx,             y: cy + 12,        expect: 'expand' },
+      { name: 'mic-area',            x: 22,             y: cy,             expect: 'expand' },
+      { name: 'expand-area',         x: geom.v.w - 22,  y: cy,             expect: 'expand' },
+      { name: 'top-left-corner',     x: 4,              y: 4,              expect: 'expand' },
+      { name: 'bottom-right-corner', x: geom.v.w - 4,   y: geom.v.h - 4,   expect: 'expand' },
     ];
 
     let failed = 0;

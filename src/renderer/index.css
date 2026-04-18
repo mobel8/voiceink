@@ -843,25 +843,6 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   opacity: 0;
   transition: opacity 0.22s ease, transform 0.22s ease;
 }
-/* Forgiving hover halo around the visible capsule. Extends the :hover
-   hit-box from 52×20 to 80×32 without changing the paint, so the user
-   can approach the dot from a few pixels left/right/top/bottom and the
-   widget still opens. We stop short of x ≤ 46 (mic footprint) and
-   x ≥ 144 (expand footprint) so the "capsule-only entry" contract
-   still rejects hovers over where those invisible buttons would be.
-   The alpha-0.01 background is there for the same reason we use it on
-   .density-compact — it gives Chromium a paint layer so :hover is
-   guaranteed to fire on the pseudo even though it has no visible fill. */
-.pill-idle-capsule::before {
-  content: '';
-  position: absolute;
-  inset: -6px -14px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.01);
-  pointer-events: auto;
-  -webkit-app-region: drag;
-}
-
 /* Collapsed (idle, not hovered-on-dot): glass body transparent, small
    black capsule visible. NO size/padding change — pure paint. */
 .pill-root.is-idle .pill {
@@ -875,18 +856,13 @@ html[data-shimmer="1"] .glass-strong:hover::before {
 .pill-root.is-idle .pill-idle-capsule {
   opacity: 1;
 }
-/* Idle + hover-on-dot: glass body re-appears, small capsule fades
-   out. The capsule itself has a solid rgb background so :hover on it
-   is hit-test-stable in Electron's transparent window (the flake we
-   hit earlier was specifically about hovering an alpha-0 surface).
-   Entry gate = capsule hovered. Retention = pill-full hovered (which
-   can only fire AFTER the face/full z-index flip, i.e. once the pill
-   is already expanded — see the face/full rules below). Hovering any
-   other pixel of the 176×55 window leaves the pill collapsed, which
-   is the whole point of the "retracted" affordance: only the black
-   dot opens the widget. */
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill,
-.pill-root.is-idle:has(.pill-full:hover) .pill {
+/* Idle + hovered (anywhere on the 176×55 pill window): glass body
+   re-appears, small capsule fades out. The alpha-0.01 background on
+   .density-compact (see its own comment) keeps every pixel of the
+   window hit-testable, so :hover on .pill-root is stable from the
+   moment the cursor enters the BrowserWindow until it leaves — no
+   mid-animation :hover flip, no expand/collapse oscillation. */
+.pill-root.is-idle:hover .pill {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -899,8 +875,7 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
   -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
 }
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-capsule,
-.pill-root.is-idle:has(.pill-full:hover) .pill-idle-capsule {
+.pill-root.is-idle:hover .pill-idle-capsule {
   opacity: 0;
   transform: scale(0.85);
 }
@@ -929,18 +904,16 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   z-index: 1;
 }
 
-/* Idle + dot hovered (or, once expanded, pill-full hovered): swap
-   the faces in pure CSS — React is NOT involved, so we can't re-enter
-   the hit-test / re-render loop that caused the hover oscillation.
-   Chromium's :hover state updates at paint time only and is inherently
-   stable once the hovered target has a solid background. */
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-face,
-.pill-root.is-idle:has(.pill-full:hover) .pill-idle-face {
+/* Idle + hovered: swap the faces (idle-dot out, full-UI in) in pure
+   CSS — React is NOT involved, so we can't re-enter the hit-test /
+   re-render loop that caused the old hover oscillation. Chromium's
+   :hover state updates at paint time only and is stable here thanks
+   to the alpha-0.01 background on .density-compact. */
+.pill-root.is-idle:hover .pill-idle-face {
   opacity: 0;
   z-index: 0;
 }
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-full,
-.pill-root.is-idle:has(.pill-full:hover) .pill-full {
+.pill-root.is-idle:hover .pill-full {
   opacity: 1;
   z-index: 1;
 }

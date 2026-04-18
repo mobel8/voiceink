@@ -35,6 +35,7 @@ scripts/do-commit3.bat
 scripts/do-commit4.bat
 scripts/do-commit5.bat
 scripts/do-commit6.bat
+scripts/do-commit7.bat
 scripts/show-electron.bat
 scripts/show-electron-appdata.bat
 scripts/_msg2.txt
@@ -42,6 +43,7 @@ scripts/_msg3.txt
 scripts/_msg4.txt
 scripts/_msg5.txt
 scripts/_msg6.txt
+scripts/_msg7.txt
 scripts/push.bat
 scripts/echeck.bat
 scripts/launch-pill.bat
