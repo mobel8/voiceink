@@ -2,19 +2,25 @@
  * Regression test that runs against the ACTUAL INSTALLED VoiceInk.exe,
  * not the dev loopback.
  *
- * Current UX contract — "hover-anywhere expands":
- *   - The pill window is 176×55. Hovering ANY pixel inside that
- *     window (including the invisible mic/expand button footprints
- *     and the transparent corners) must expand the pill.
- *   - Leaving the window collapses it back.
+ * Current UX contract — "dot-only hover expands" (Option D):
+ *   - The black capsule is 52×20 px, centred in the 176×55 pill
+ *     window. Hovering ANY pixel of that capsule (and only that
+ *     capsule) must expand the pill.
+ *   - Hovering the transparent margin, the invisible mic footprint,
+ *     the invisible expand footprint, or the corners must leave the
+ *     pill retracted.
+ *   - Once expanded, hovering the `.pill-full` UI (the mic + expand
+ *     buttons that are now visible) must KEEP it expanded so the
+ *     user can actually click them — this retention is handled by
+ *     the `:has(.pill-full:hover)` sibling rule in index.css.
+ *   - Leaving the window collapses back to the dot.
  *
- * We drive CDP Input.dispatchMouseEvent to each probe point and check
- * getComputedStyle(.pill-full).opacity to tell expanded from retracted.
+ * We drive CDP Input.dispatchMouseEvent to each probe and check
+ * getComputedStyle(.pill-full).opacity.
  *
  * Force VOICEINK_FORCE_DENSITY=compact so main opens a 176×55 pill
- * regardless of what the persisted `density` says — that also exercises
- * the density-pinning fix in useStore (mismatched hash vs. saved
- * density must NOT swap the CompactView for the MainView mid-session).
+ * regardless of the persisted `density` — that also exercises the
+ * density-pinning fix in useStore.
  */
 const { spawn, execSync } = require('child_process');
 const path = require('path');
@@ -142,6 +148,20 @@ async function evalJS(cdp, js) {
     async function moveTo(x, y) {
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', buttons: 0 });
     }
+    /**
+     * Fully drop any :hover state before the next probe. Simply
+     * moving to (-10, -10) is unreliable — Chromium may clamp the
+     * x/y to the viewport, keeping :hover on whatever element was
+     * under (0, 0). We use a large off-screen coordinate instead
+     * (Chromium honours it and reports no elementFromPoint hit),
+     * and wait a transition worth of time for the CSS fade-out.
+     */
+    async function clearHover() {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: 9000, y: 9000, button: 'none', buttons: 0,
+      });
+      await sleep(350);
+    }
     async function snap() {
       return evalJS(cdp, `(() => {
         const full = document.querySelector('.pill-full');
@@ -156,41 +176,70 @@ async function evalJS(cdp, js) {
       })()`);
     }
 
+    // Capsule rect at standard 176×55 geometry: x=62..114, y=18..38
+    // (52×20 centred on (88,28)). We probe interior points that must
+    // expand and exterior points that must stay retracted.
     const cx = geom.cap.x, cy = geom.cap.y;
+    const M_IN = 3;   // margin inside capsule edge (px) — safely away from hit-test edge
+    const M_OUT = 3;  // margin outside capsule edge (px)
     const probes = [
-      { name: 'dot-centre',          x: cx,             y: cy,             expect: 'expand' },
-      { name: 'near-dot-left',       x: cx - 18,        y: cy,             expect: 'expand' },
-      { name: 'near-dot-right',      x: cx + 18,        y: cy,             expect: 'expand' },
-      { name: 'near-dot-top',        x: cx,             y: cy - 12,        expect: 'expand' },
-      { name: 'near-dot-bottom',     x: cx,             y: cy + 12,        expect: 'expand' },
-      { name: 'mic-area',            x: 22,             y: cy,             expect: 'expand' },
-      { name: 'expand-area',         x: geom.v.w - 22,  y: cy,             expect: 'expand' },
-      { name: 'top-left-corner',     x: 4,              y: 4,              expect: 'expand' },
-      { name: 'bottom-right-corner', x: geom.v.w - 4,   y: geom.v.h - 4,   expect: 'expand' },
+      // --- INSIDE THE CAPSULE → must expand ---
+      { name: 'dot-centre',          x: cx,                            y: cy,                            expect: 'expand' },
+      { name: 'dot-inner-left',      x: cx - geom.cap.halfW + M_IN,    y: cy,                            expect: 'expand' },
+      { name: 'dot-inner-right',     x: cx + geom.cap.halfW - M_IN,    y: cy,                            expect: 'expand' },
+      { name: 'dot-inner-top',       x: cx,                            y: cy - geom.cap.halfH + M_IN,    expect: 'expand' },
+      { name: 'dot-inner-bottom',    x: cx,                            y: cy + geom.cap.halfH - M_IN,    expect: 'expand' },
+      // --- OUTSIDE THE CAPSULE → must retract ---
+      { name: 'just-outside-left',   x: cx - geom.cap.halfW - M_OUT,   y: cy,                            expect: 'retract' },
+      { name: 'just-outside-right',  x: cx + geom.cap.halfW + M_OUT,   y: cy,                            expect: 'retract' },
+      { name: 'just-above-dot',      x: cx,                            y: cy - geom.cap.halfH - M_OUT,   expect: 'retract' },
+      { name: 'just-below-dot',      x: cx,                            y: cy + geom.cap.halfH + M_OUT,   expect: 'retract' },
+      { name: 'mic-area',            x: 22,                            y: cy,                            expect: 'retract' },
+      { name: 'expand-area',         x: geom.v.w - 22,                 y: cy,                            expect: 'retract' },
+      { name: 'top-left-corner',     x: 4,                             y: 4,                             expect: 'retract' },
+      { name: 'bottom-right-corner', x: geom.v.w - 4,                  y: geom.v.h - 4,                  expect: 'retract' },
     ];
 
     let failed = 0;
     for (const p of probes) {
-      await moveTo(-10, -10); await sleep(130);
-      await moveTo(p.x, p.y); await sleep(200);
+      await clearHover();
+      await moveTo(p.x, p.y); await sleep(280);
       const s = await snap();
       const expanded = parseFloat(s.fullOp) > 0.5;
       const ok = (p.expect === 'expand') ? expanded : !expanded;
-      console.log('  ' + (ok ? 'OK ' : 'FAIL') + '  ' + p.name.padEnd(20) +
+      console.log('  ' + (ok ? 'OK ' : 'FAIL') + '  ' + p.name.padEnd(22) +
         ' (' + Math.round(p.x) + ',' + Math.round(p.y) + ')  fullOp=' + s.fullOp +
         ' capOp=' + s.capOp);
       if (!ok) failed++;
     }
 
+    // Retention sweep: land on the dot, then slide to the mic button
+    // (which is only revealed once the pill has expanded) and to the
+    // expand button on the right. Both should keep fullOp at 1.
+    await clearHover();
+    await moveTo(cx, cy);  await sleep(260);
+    await moveTo(22, cy);  await sleep(240);
+    const atMic = await snap();
+    const retainMicOK = parseFloat(atMic.fullOp) > 0.5;
+    console.log('  ' + (retainMicOK ? 'OK ' : 'FAIL') + '  retention-mic          (22,' + Math.round(cy) + ')  fullOp=' + atMic.fullOp);
+    if (!retainMicOK) failed++;
+
+    await moveTo(geom.v.w - 22, cy); await sleep(240);
+    const atExpand = await snap();
+    const retainExpandOK = parseFloat(atExpand.fullOp) > 0.5;
+    console.log('  ' + (retainExpandOK ? 'OK ' : 'FAIL') + '  retention-expand       (' + (geom.v.w - 22) + ',' + Math.round(cy) + ')  fullOp=' + atExpand.fullOp);
+    if (!retainExpandOK) failed++;
+
     // Collapse
-    await moveTo(-50, -50); await sleep(350);
+    await clearHover();
     const collapsed = await snap();
     const collapseOK = parseFloat(collapsed.fullOp) < 0.05;
-    console.log('  ' + (collapseOK ? 'OK ' : 'FAIL') + '  leave-pill-area      fullOp=' + collapsed.fullOp);
+    console.log('  ' + (collapseOK ? 'OK ' : 'FAIL') + '  leave-pill-area        fullOp=' + collapsed.fullOp);
     if (!collapseOK) failed++;
 
-    console.log(failed === 0 ? '\n✅ PASS (all ' + probes.length + ' probes + collapse)\n'
-                             : '\n❌ FAIL: ' + failed + ' check(s)\n');
+    const totalChecks = probes.length + 3; // + retention-mic, retention-expand, collapse
+    console.log(failed === 0 ? '\n✅ PASS (' + totalChecks + ' probes + retention + collapse)\n'
+                             : '\n❌ FAIL: ' + failed + ' of ' + totalChecks + ' check(s)\n');
     totalFail += failed;
 
     try { cdp.ws.close(); } catch {}

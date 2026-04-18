@@ -841,7 +841,12 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   display: grid;
   place-items: center;
   opacity: 0;
-  transition: opacity 0.22s ease, transform 0.22s ease;
+  /* Pure opacity fade — NO transform. Scaling the capsule mid-hover
+     would shrink its hit-test box out from under a cursor sitting
+     right at the 52×20 edge, dropping :hover for a frame and
+     re-triggering the old expand/collapse oscillation. Keeping the
+     box fixed at 52×20 makes the entry hit-test rock-solid. */
+  transition: opacity 0.22s ease;
 }
 /* Collapsed (idle, not hovered-on-dot): glass body transparent, small
    black capsule visible. NO size/padding change — pure paint. */
@@ -856,13 +861,20 @@ html[data-shimmer="1"] .glass-strong:hover::before {
 .pill-root.is-idle .pill-idle-capsule {
   opacity: 1;
 }
-/* Idle + hovered (anywhere on the 176×55 pill window): glass body
-   re-appears, small capsule fades out. The alpha-0.01 background on
-   .density-compact (see its own comment) keeps every pixel of the
-   window hit-testable, so :hover on .pill-root is stable from the
-   moment the cursor enters the BrowserWindow until it leaves — no
-   mid-animation :hover flip, no expand/collapse oscillation. */
-.pill-root.is-idle:hover .pill {
+/* Idle + hover on the visible 52×20 black capsule only: glass body
+   re-appears, capsule fades out. The capsule has a solid
+   rgba(10,10,12,0.92) background so :hover on it is hit-test-stable
+   in Electron's transparent window — no alpha-0 pixels for DWM to
+   punch through, no mid-animation :hover flip. Entry gate =
+   .pill-idle-capsule:hover. Retention = .pill-full:hover (kicks in
+   once the face/full z-index flip has happened, so the user can
+   move onto the mic / expand buttons inside the expanded pill
+   without it snapping shut). Hovering any other pixel of the
+   176×55 window — including the transparent margin, the mic
+   footprint, the expand footprint, the corners — leaves the pill
+   retracted, which is the whole point of the dot affordance. */
+.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill,
+.pill-root.is-idle:has(.pill-full:hover) .pill {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -875,9 +887,9 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
   -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
 }
-.pill-root.is-idle:hover .pill-idle-capsule {
+.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-capsule,
+.pill-root.is-idle:has(.pill-full:hover) .pill-idle-capsule {
   opacity: 0;
-  transform: scale(0.85);
 }
 /* Idle (default) face visible. */
 .pill-root.is-idle .pill-full {
@@ -904,16 +916,18 @@ html[data-shimmer="1"] .glass-strong:hover::before {
   z-index: 1;
 }
 
-/* Idle + hovered: swap the faces (idle-dot out, full-UI in) in pure
-   CSS — React is NOT involved, so we can't re-enter the hit-test /
-   re-render loop that caused the old hover oscillation. Chromium's
-   :hover state updates at paint time only and is stable here thanks
-   to the alpha-0.01 background on .density-compact. */
-.pill-root.is-idle:hover .pill-idle-face {
+/* Idle + dot hovered (or, once expanded, pill-full hovered): swap
+   the two faces in pure CSS. React is NOT involved, so we cannot
+   re-enter the hit-test / re-render loop that caused the old hover
+   oscillation. Chromium's :hover updates at paint time and is
+   inherently stable once the hovered target has a solid background. */
+.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-face,
+.pill-root.is-idle:has(.pill-full:hover) .pill-idle-face {
   opacity: 0;
   z-index: 0;
 }
-.pill-root.is-idle:hover .pill-full {
+.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-full,
+.pill-root.is-idle:has(.pill-full:hover) .pill-full {
   opacity: 1;
   z-index: 1;
 }
