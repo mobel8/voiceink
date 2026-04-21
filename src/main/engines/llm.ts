@@ -32,17 +32,21 @@ function resolveLangName(settings: Settings, hint?: string): string {
 }
 
 /**
- * Is the LLM post-processing layer effectively available?
+ * Is the LLM post-processing layer effectively reachable?
  *
- * We honour `llmEnabled` as a hard off-switch, but treat its default
- * (undefined / false) leniently: if the user picked a non-raw mode AND
- * a provider key is reachable, the intent is clearly "apply the mode",
- * so we do. This fixes the older behaviour where users selected a mode
- * in the UI but silently got the raw Whisper text because they never
- * toggled "Activer LLM" in settings.
+ * The ONLY signal we honour is "can we actually call a provider right
+ * now?" — a Groq/OpenAI/Anthropic key is present, or Ollama is assumed
+ * to be running locally. We deliberately do NOT gate on the old
+ * `llmEnabled` setting here: selecting a non-raw mode in the mode picker
+ * IS the user's intent to polish, and that is the only place users
+ * actually think about modes. The legacy "Activer LLM" toggle in
+ * SettingsView used to hard-block this path, which turned every mode
+ * other than 'raw' into a silent no-op for the many users who never
+ * opened SettingsView. `llmEnabled` is still kept on Settings so the
+ * advanced-config panel can collapse its provider UI behind it, but it
+ * no longer affects behaviour.
  */
 function isLlmAvailable(settings: Settings): boolean {
-  if (settings.llmEnabled === false) return false;
   const p = settings.llmProvider || 'groq';
   if (p === 'ollama') return true; // local, no key needed
   if (p === 'groq') return !!(settings.groqApiKey || settings.llmApiKey);
@@ -57,8 +61,10 @@ export async function postProcess(
 ): Promise<string> {
   if (mode === 'raw' || !text.trim()) return text;
   if (!isLlmAvailable(settings)) {
-    console.warn(`[llm] mode=${mode} requested but no provider available — returning raw text. ` +
-      `Set settings.groqApiKey or settings.llmApiKey, or switch provider to 'ollama'.`);
+    const provider = settings.llmProvider || 'groq';
+    console.warn(`[llm] mode=${mode} requested but no key configured for provider=${provider}.` +
+      ` Returning raw Whisper text. Fix: set settings.groqApiKey (Groq / default) or` +
+      ` settings.llmApiKey (OpenAI / Anthropic), or switch provider to 'ollama' for local.`);
     return text;
   }
 
