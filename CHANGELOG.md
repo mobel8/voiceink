@@ -5,6 +5,12 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.1.3] — 2026-04-21
+
+### Corrigé
+- **Icône « Brut » toujours cassée en 1.1.2** — pas un problème de font ni de choix d'emoji, mais un bug d'encodage. Le caractère 🎤 (U+1F3A4, 4 octets UTF-8) avait été corrompu en U+FFFD (REPLACEMENT CHARACTER, le losange noir avec `?`) lors d'une édition précédente. Trois occurrences corrompues détectées dans `src/renderer/lib/constants.ts` (JSDoc, tableau de pairs emoji/icône, champ `raw.icon` lui-même). Fix appliqué au niveau binaire via un script Node qui réécrit directement les octets 0xF0 0x9F 0x8E 0xA4, court-circuitant toute chaîne d'édition susceptible de retomber sur le même problème.
+- **Nouveau scan `scripts/_scan-ufffd.js`** — vérifie l'absence de U+FFFD dans tous les fichiers sources potentiellement édités, utilisable avant chaque commit pour détecter les corruptions similaires en amont.
+
 ## [1.1.2] — 2026-04-21
 
 ### Corrigé

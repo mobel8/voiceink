@@ -21,9 +21,9 @@ import { Mode } from '../../shared/types';
  * the Emoji 13.0 data file. Any fancier emoji (🪶 feather 2020, 🖋️
  * fountain pen with VS16) triggered tofu rectangles on some systems.
  *
- *   raw     → �  + Mic          (voice captured as-is, no post-processing)
+ *   raw     → 🎤  + Mic          (voice captured as-is, no post-processing)
  *   natural → 🍃  + Leaf         (natural, light flow of speech)
- *   formal  → �  + Briefcase    (professional, elevated register)
+ *   formal  → 🎤  + Briefcase    (professional, elevated register)
  *   message → 💬  + MessageSquare (compressed, conversational chat reply)
  */
 export const MODE_LABELS: Record<Mode, {
@@ -32,7 +32,7 @@ export const MODE_LABELS: Record<Mode, {
   icon: string;
   Icon: LucideIcon;
 }> = {
-  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '�', Icon: Mic },
+  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '🎤', Icon: Mic },
   natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte',    icon: '🍃', Icon: Leaf },
   formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '👔', Icon: Briefcase },
   message: { label: 'Message', desc: 'Compression courte, conversationnel, 1 à 3 phrases',    icon: '💬', Icon: MessageSquare },
