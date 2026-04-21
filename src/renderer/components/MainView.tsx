@@ -59,10 +59,19 @@ export function MainView() {
     },
   });
 
+  // Hold the latest recState in a ref so the IPC handler never reads a
+  // stale value. Same fix as CompactView — without it, a shortcut press
+  // arriving during the ~1-frame window between setRecState('recording')
+  // and the effect's re-run would see the old 'idle' value and try to
+  // start a second recorder on top of the first.
+  const recStateRef = useRef(recState);
+  recStateRef.current = recState;
+
   const toggle = async () => {
-    if (recState === 'recording') {
+    const current = recStateRef.current;
+    if (current === 'recording') {
       recorder.stop();
-    } else if (recState === 'idle' || recState === 'error') {
+    } else if (current === 'idle' || current === 'error') {
       setLastError('');
       setLastTranscript('');
       setRecState('recording');
@@ -70,25 +79,30 @@ export function MainView() {
     }
   };
 
-  // Global toggle shortcut from main process
+  // Global toggle shortcut from main. Registered ONCE so there is never
+  // a gap between unsubscribe-old and subscribe-new during rapid state
+  // transitions; the toggle() above reads the ref, not the closure.
   useEffect(() => {
     const unsub = window.voiceink.onToggleRecording(() => toggle());
     return () => unsub?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recState, settings]);
+  }, []);
 
-  // Keyboard: Space to toggle (when focused on main view, not in input)
+  // Keyboard: Space to toggle (when focused on main view, not in input).
+  // Registered ONCE; recState reads go through recStateRef so there's
+  // never a stale-closure window between React state commits and the
+  // effect re-running (same contract as CompactView).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); toggle(); }
-      if (e.code === 'Escape' && recState === 'recording') { recorder.stop(); }
+      if (e.code === 'Escape' && recStateRef.current === 'recording') { recorder.stop(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recState]);
+  }, []);
 
   const copy = async () => {
     if (!lastTranscript) return;

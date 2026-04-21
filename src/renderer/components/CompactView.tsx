@@ -116,17 +116,21 @@ export function CompactView() {
   // Keyboard shortcuts when the pill is focused:
   //   Space  → toggle
   //   Esc    → stop if recording
+  // Registered ONCE with deps=[]: recState is read through recStateRef
+  // so we never capture a stale value, and recorder.stop is safe to
+  // call from a stale reference because useAudioRecorder returns a
+  // stable callback across renders.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); toggle(); }
-      if (e.code === 'Escape' && recState === 'recording') recorder.stop();
+      if (e.code === 'Escape' && recStateRef.current === 'recording') recorder.stop();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recState]);
+  }, []);
 
   const expand = async () => {
     await window.voiceink.windowResizeForDensity?.('comfortable');

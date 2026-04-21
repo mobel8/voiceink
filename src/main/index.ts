@@ -45,6 +45,37 @@ if (!_gotLock) {
   process.exit(0);
 }
 
+// Register the second-instance handler BEFORE whenReady. A fast
+// double-click on the desktop shortcut can race: the second process
+// spawns, loses the lock, emits this event, and quits — all within
+// a few hundred ms, potentially before the primary's whenReady block
+// has run. Attaching the listener at module import time closes that
+// window. We use a getter-style accessor for getWin() because the
+// variable isn't defined yet at this point in file order (hoisted
+// via function declaration / closure below).
+app.on('second-instance', () => {
+  try {
+    const w = getWinSafe();
+    if (!w || w.isDestroyed()) return;
+    if (w.isMinimized()) w.restore();
+    if (!w.isVisible()) w.showInactive();
+    // Don't steal keyboard focus — the pill is designed to float
+    // silently above the user's work. For the comfortable window we
+    // DO focus since the user explicitly relaunched the app.
+    if (getSettings().density === 'comfortable') w.focus();
+  } catch (e) {
+    console.warn('[second-instance]', e);
+  }
+});
+
+// Forward accessor so the event listener above works even though
+// getWin() is declared later in file order. getWin() itself uses the
+// `current` module-level variable, which is `null` until createWindow
+// runs — the listener handles that gracefully by returning early.
+function getWinSafe(): BrowserWindow | null {
+  try { return getWin(); } catch { return null; }
+}
+
 /**
  * Wraps an Electron BrowserWindow with the density it was built for and
  * per-instance state we want to clean up deterministically (e.g. the pill
@@ -562,25 +593,9 @@ app.whenReady().then(async () => {
   await createWindow();
   try { createTray(getWin); } catch (e) { console.warn('[tray]', e); }
   try { registerShortcuts(getWin); } catch (e) { console.warn('[shortcuts]', e); }
-
-  // Second-instance signal: the user relaunched VoiceInk (e.g. a second
-  // click on the desktop shortcut, a Windows "run at startup" on top of
-  // an already running tray instance, etc.). The losing process has
-  // already quit itself; here we just surface our pill so the user gets
-  // visible feedback that "the app is already running".
-  app.on('second-instance', () => {
-    const w = getWin();
-    if (!w || w.isDestroyed()) return;
-    try {
-      if (w.isMinimized()) w.restore();
-      if (!w.isVisible()) w.showInactive();
-      // Don't steal keyboard focus — the pill is meant to float silently
-      // over whatever the user was doing. show() alone is enough for
-      // Windows to draw attention to it (brief flash in the taskbar for
-      // the comfortable window, or pop-to-top on the always-on-top pill).
-      if (getSettings().density === 'comfortable') w.focus();
-    } catch {}
-  });
+  // Note: 'second-instance' handler is registered earlier in this
+  // file (at module import time) so it's live before whenReady
+  // resolves — see the block right after requestSingleInstanceLock.
 });
 
 app.on('window-all-closed', () => {
