@@ -20,6 +20,31 @@ import { getSettings, setSettings } from './services/config';
 app.setName('voiceink');
 app.setPath('userData', join(app.getPath('appData'), 'voiceink'));
 
+// Single-instance lock. Without this, double-clicking the desktop
+// shortcut spawns a second Electron process that:
+//   - shows its own (duplicate) pill floating near the first one,
+//   - registers its own tray icon,
+//   - tries to grab the global shortcut — which fails silently because
+//     the first instance already holds it, so pressing the hotkey only
+//     toggles the first instance's recorder and nothing visually
+//     changes on the second instance's pill (which is the one the user
+//     is usually looking at, since it opened last and therefore sits
+//     on top).
+//
+// `requestSingleInstanceLock` atomically claims ownership per userData
+// dir. Non-primary processes get back `false`, forward their CLI args
+// to the primary via the 'second-instance' event, and quit immediately.
+// The primary surfaces its window so a repeated shortcut click always
+// "focuses VoiceInk" instead of opening a duplicate.
+const _gotLock = app.requestSingleInstanceLock();
+if (!_gotLock) {
+  app.quit();
+  // Hard-exit so the rest of this module never runs: ipc registration,
+  // tray creation, shortcut registration etc. all happen at import time
+  // further down, and we must not execute any of it in a losing process.
+  process.exit(0);
+}
+
 /**
  * Wraps an Electron BrowserWindow with the density it was built for and
  * per-instance state we want to clean up deterministically (e.g. the pill
@@ -537,6 +562,25 @@ app.whenReady().then(async () => {
   await createWindow();
   try { createTray(getWin); } catch (e) { console.warn('[tray]', e); }
   try { registerShortcuts(getWin); } catch (e) { console.warn('[shortcuts]', e); }
+
+  // Second-instance signal: the user relaunched VoiceInk (e.g. a second
+  // click on the desktop shortcut, a Windows "run at startup" on top of
+  // an already running tray instance, etc.). The losing process has
+  // already quit itself; here we just surface our pill so the user gets
+  // visible feedback that "the app is already running".
+  app.on('second-instance', () => {
+    const w = getWin();
+    if (!w || w.isDestroyed()) return;
+    try {
+      if (w.isMinimized()) w.restore();
+      if (!w.isVisible()) w.showInactive();
+      // Don't steal keyboard focus — the pill is meant to float silently
+      // over whatever the user was doing. show() alone is enough for
+      // Windows to draw attention to it (brief flash in the taskbar for
+      // the comfortable window, or pop-to-top on the always-on-top pill).
+      if (getSettings().density === 'comfortable') w.focus();
+    } catch {}
+  });
 });
 
 app.on('window-all-closed', () => {

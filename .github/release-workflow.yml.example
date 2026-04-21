@@ -3,11 +3,16 @@ name: Build installers
 on:
   push:
     tags:
-      - 'v*'          # build automatically on `git tag v1.2.3 && git push --tags`
-  workflow_dispatch:   # and let you run it on demand from the Actions tab
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: 'Create a draft GitHub release'
+        required: false
+        default: 'false'
 
 permissions:
-  contents: write      # needed to attach artifacts to the GitHub Release
+  contents: write
 
 jobs:
   build:
@@ -17,18 +22,24 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            artifact: "release/*-Setup-*.exe"
+            artifact: |
+              release/VoiceInk-Setup-*.exe
           - os: ubuntu-latest
             name: Linux
             artifact: |
               release/*.AppImage
               release/*.deb
+              release/*.rpm
+              release/*.tar.gz
           - os: macos-latest
             name: macOS
-            artifact: "release/*.dmg"
+            artifact: |
+              release/*.dmg
+              release/*.zip
 
     runs-on: ${{ matrix.os }}
     name: Build ${{ matrix.name }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -55,24 +66,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install fpm (Linux)
+      - name: Install FPM + RPM tooling (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm && sudo gem install --no-document fpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm
+          sudo gem install --no-document fpm
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: npx electron-builder --linux --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USE_SYSTEM_FPM: 'true'
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Unsigned build — fine for personal distribution, users will
-          # need to right-click → Open on first launch.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Verify artifacts
+        run: node scripts/verify-artifacts.js
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
@@ -86,7 +102,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
+          files: |
+            release/VoiceInk-Setup-*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+            release/*.dmg
+            release/*.zip
           draft: false
           prerelease: false
           fail_on_unmatched_files: false

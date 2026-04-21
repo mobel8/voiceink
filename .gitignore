@@ -46,6 +46,7 @@ scripts/_msg6.txt
 scripts/_msg7.txt
 scripts/_msg8.txt
 scripts/_msg9.txt
+scripts/_msg10.txt
 scripts/push.bat
 scripts/echeck.bat
 scripts/launch-pill.bat
@@ -55,4 +56,5 @@ scripts/cleanup.bat
 scripts/_*.bat
 scripts/_*.js
 scripts/_*.out
+scripts/_*.pid
 scripts/_msg.txt

@@ -83,20 +83,35 @@ export function CompactView() {
     },
   });
 
+  // Hold the latest recState in a ref so the IPC handler never reads a
+  // stale value. Without this, the listener captured whatever recState
+  // was when the effect last ran; a shortcut press that arrived during
+  // the ~1-frame window between setRecState('recording') and the
+  // effect's re-run would wrongly be treated as "still idle" and issue
+  // a second recorder.start() instead of recorder.stop().
+  const recStateRef = useRef(recState);
+  recStateRef.current = recState;
+
   const toggle = async () => {
-    if (recState === 'recording') { recorder.stop(); return; }
-    if (recState === 'processing') return;
+    const current = recStateRef.current;
+    if (current === 'recording') { recorder.stop(); return; }
+    if (current === 'processing') return;
     setLastError('');
     setRecState('recording');
     await recorder.start();
   };
 
-  // Global shortcut forwarded from main.
+  // Global shortcut forwarded from main. Registered ONCE so we never
+  // double-register during rapid state changes, and dispatches through
+  // the ref-backed toggle above.
   useEffect(() => {
-    const unsub = window.voiceink.onToggleRecording(() => toggle());
+    const unsub = window.voiceink.onToggleRecording(() => {
+      try { window.voiceink.log?.('[compact] ON_TOGGLE_RECORDING received, recState=', recStateRef.current); } catch {}
+      toggle();
+    });
     return () => unsub?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recState, settings]);
+  }, []);
 
   // Keyboard shortcuts when the pill is focused:
   //   Space  → toggle
