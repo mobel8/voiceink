@@ -76,7 +76,7 @@ export function validateTranscribeRequest(x: unknown): TranscribeRequest | null 
   const mimeType = isString(x.mimeType) ? x.mimeType.slice(0, 64) : 'audio/webm';
   const mode = isOneOf(
     x.mode,
-    ['raw', 'email', 'message', 'meeting', 'summary', 'formal', 'simple'] as const,
+    ['raw', 'natural', 'formal', 'message'] as const,
   )
     ? (x.mode as TranscribeRequest['mode'])
     : 'raw';

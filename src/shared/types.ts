@@ -4,14 +4,81 @@ import type { ThemeId, ThemeEffects } from './themes';
 export type { ThemeId, ThemeEffects } from './themes';
 export { THEMES, THEME_ORDER, DEFAULT_EFFECTS, getTheme } from './themes';
 
+/**
+ * Tone modes for dictation post-processing.
+ *
+ * We intentionally keep this list SHORT — one entry per distinct
+ * "manière de parler" the user actually needs. Older modes (`email`,
+ * `meeting`, `summary`, `simple`) were either templates that add
+ * content the user never dictated (greetings, bullets), length
+ * operations rather than tone choices, or redundant with `natural`.
+ *
+ * Persisted old values are migrated in services/config.ts.
+ */
 export type Mode =
   | 'raw'
-  | 'email'
-  | 'message'
-  | 'meeting'
-  | 'summary'
+  | 'natural'
   | 'formal'
-  | 'simple';
+  | 'message';
+
+/**
+ * Prompt templates for each post-processing mode.
+ *
+ * They use `{{LANG}}` as a placeholder for the human-readable language
+ * name ("French", "English", "Japanese"…) injected at runtime by
+ * `postProcess()` based on whatever Whisper detected (or the user
+ * explicitly selected).
+ *
+ * The prompts are deliberately written in English because every major
+ * LLM (Groq llama-3.3, GPT-4o, Claude, Ollama models) follows English
+ * instructions more reliably than localised ones. Experimentally, a
+ * French system prompt biases the output language even when told "keep
+ * the original language" — so we state the language twice, once as a
+ * hard instruction ("RESPOND IN {{LANG}}") and once as context.
+ *
+ * Every prompt ends with an anti-preamble clause because Llama-style
+ * models love to prepend things like "Here is the rewritten text:".
+ *
+ * Every non-raw prompt MUST:
+ *  1. Preserve every fact, number, name and date the user dictated.
+ *  2. Never translate. {{LANG}} in = {{LANG}} out.
+ *  3. Never add greetings, sign-offs, bullets, or structure the user
+ *     didn't dictate. The user's intent matters more than the template.
+ *  4. Return ONLY the rewritten text — no quotes, no markdown fences,
+ *     no "Here is…" preamble.
+ */
+export const MODE_PROMPTS: Record<Mode, string> = {
+  raw: '',
+  natural:
+    `You are cleaning up a dictated voice note in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Your ONLY job: fix punctuation, capitalisation, obvious typos, and remove hesitation fillers.` +
+    ` In French remove: "euh, heu, ben, bah, mmh, ouais, voilà, du coup, enfin, alors, quoi" (especially at sentence boundaries).` +
+    ` In English remove: "um, uh, er, like, you know, I mean, so" (when used as fillers).` +
+    ` Equivalents in other languages.` +
+    ` PRESERVE the user's voice, vocabulary, sentence structure, tone, register and level of detail EXACTLY.` +
+    ` DO NOT rephrase, summarise, shorten, elaborate, add politeness, change the register, or split/merge sentences beyond basic punctuation.` +
+    ` Keep every fact, number, name and date intact. If the user stutters a word ("je je pense"), keep only one copy.` +
+    ` OUTPUT: return ONLY the cleaned text. No preamble, no quotes, no markdown fences, no commentary.`,
+  formal:
+    `You are rewriting a dictated voice note in a formal, courteous register in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Remove every filler ("euh, ben, voilà, du coup" in French; "um, uh, like, you know" in English; equivalents in other languages)` +
+    ` and every colloquialism. Use complete, well-formed sentences with proper punctuation and capitalisation.` +
+    ` In French: avoid contractions ("j'sais" → "je sais"); prefer formal vocabulary (e.g. "production" over "prod", "nécessaire" over "faut").` +
+    ` In English: no contractions ("do not" not "don't"), no slang ("cannot" not "can't"). Similar formalisation in other languages.` +
+    ` Keep ALL facts, numbers, names and dates EXACTLY as stated.` +
+    ` CRITICAL — DO NOT ADD CONTENT. Never add greetings ("Bonjour", "Madame", "Dear…"), sign-offs ("Cordialement", "Je vous prie", "Best regards"), closing phrases ("bien vouloir noter", "please take note", "merci d'avance"),` +
+    ` administrative wrappers ("Je vous informe que…", "Je vous confirme que…"), or ANY sentence that wasn't in the original dictation.` +
+    ` The output must contain EXACTLY the same information as the input — only the register changes.` +
+    ` Output length: stay within 90–120% of the input word count.` +
+    ` OUTPUT: return ONLY the rewritten text. No preamble, no quotes, no markdown, no commentary.`,
+  message:
+    `You are rewriting a dictated voice note into a concise, natural chat message in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Keep it SHORT: 1–3 sentences. Compress repetition, filler words and hesitations aggressively.` +
+    ` Keep a conversational tone — the register of the original, not a formalised version. Contractions are fine.` +
+    ` DO NOT add greetings, emoji, or closing phrases the user didn't dictate.` +
+    ` Keep every fact, number, name and date the user mentioned.` +
+    ` OUTPUT: return ONLY the message text. No preamble, no quotes, no markdown, no commentary.`,
+};
 
 /**
  * Custom dictionary entry — a word/phrase the user dictates and wants
@@ -26,66 +93,6 @@ export interface Replacement {
   wholeWord: boolean;      // default true — match word boundaries only
   enabled: boolean;
 }
-
-/**
- * Prompt templates for each post-processing mode.
- *
- * They use `{{LANG}}` as a placeholder for the human-readable language
- * name ("French", "English", "Japanese"…) injected at runtime by
- * `postProcess()` based on whatever Whisper detected (or the user
- * explicitly selected).
- *
- * The prompts are deliberately written in English because every major
- * LLM (Groq's llama-3.3, GPT-4o, Claude, Ollama models) follows English
- * instructions more reliably than localised ones. Experimentally, a
- * French system prompt biases the output language even when told "keep
- * the original language" — so we state the language twice, once as a
- * hard instruction ("RESPOND IN {{LANG}}") and once as context.
- *
- * Each prompt also includes an anti-preamble clause because Llama-style
- * models love to prepend things like "Here is the rewritten email:".
- */
-export const MODE_PROMPTS: Record<Mode, string> = {
-  raw: '',
-  email:
-    `You are rewriting a dictated voice note into a professional, polite email in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate to another language.` +
-    ` Fix punctuation, grammar and capitalisation. Keep all facts, numbers and names exact.` +
-    ` MANDATORY STRUCTURE: (1) a proper GREETING on the first line (e.g. "Bonjour", "Hello", "Hola", "Sehr geehrte Damen und Herren", "お世話になります"),` +
-    ` (2) the body of the email, (3) a proper CLOSING on the last line (e.g. "Cordialement", "Best regards", "Un saludo", "Mit freundlichen Grüßen", "よろしくお願いいたします").` +
-    ` Both greeting and closing are required — never omit either.` +
-    ` OUTPUT RULES: return ONLY the final email text, no preamble, no quotes, no markdown fences, no commentary.`,
-  message:
-    `You are rewriting a dictated voice note into a short natural chat message in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Fix typos, punctuation and capitalisation. Keep it concise (1-3 sentences) and conversational.` +
-    ` The output MUST be shorter than the input — compress filler words, repetitions and hesitations.` +
-    ` OUTPUT RULES: return ONLY the final message, no preamble, no quotes, no markdown, no commentary.`,
-  meeting:
-    `You are turning a dictated voice note into clear meeting notes in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` MANDATORY STRUCTURE: use plain markdown bullet points starting with "- " (one per line).` +
-    ` Group by topic if relevant, keep every fact, decision and action item.` +
-    ` OUTPUT RULES: return ONLY the bulleted notes, no preamble, no commentary, no code fences.`,
-  summary:
-    `You are summarising a dictated voice note into a concise synthesis in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Keep the key facts, compress redundancy, remove filler words. The output MUST be shorter than the input — aim for ~40% of the original length, never more than 80%.` +
-    ` OUTPUT RULES: return ONLY the summary, no preamble, no quotes, no commentary.`,
-  formal:
-    `You are rewriting a dictated voice note in a formal, polished register in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Remove every hesitation / filler word: in French "euh, ben, bah, ouais, voilà, du coup, alors" at the start of a sentence;` +
-    ` in English "um, uh, yeah, gonna, gotta, alright, so"; equivalents in Spanish, German, Japanese.` +
-    ` Replace colloquial vocabulary with standard register, use full sentences and correct punctuation.` +
-    ` Keep ALL facts, numbers, names and dates intact.` +
-    ` OUTPUT RULES: return ONLY the rewritten text, no preamble, no quotes, no commentary.`,
-  simple:
-    `You are rewriting a dictated voice note in plain, accessible language in {{LANG}}.` +
-    ` RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Short sentences, common vocabulary, keep every fact. Target ~CEFR B1 level readability.` +
-    ` OUTPUT RULES: return ONLY the rewritten text, no preamble, no quotes, no commentary.`,
-};
 
 export type Density = 'comfortable' | 'compact';
 

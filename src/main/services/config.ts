@@ -22,6 +22,24 @@ function store(): Store<{ settings: Settings }> {
   return _store;
 }
 
+/**
+ * Migrate deprecated `mode` values to the current 4-mode set so users
+ * who installed before the refactor don't end up with an unknown mode
+ * that fails the validator on next transcribe.
+ *
+ * Mapping rationale:
+ *   - email   → formal  (email = courteous register, minus greeting/closing)
+ *   - meeting → natural (bullets are a format, not a tone; natural is safest)
+ *   - summary → natural (length op, not a tone; natural preserves most content)
+ *   - simple  → natural (plain vocabulary ≈ lightly-cleaned)
+ */
+const MODE_MIGRATION: Record<string, Settings['mode']> = {
+  email: 'formal',
+  meeting: 'natural',
+  summary: 'natural',
+  simple: 'natural',
+};
+
 export function getSettings(): Settings {
   const s = (store() as any).get('settings', DEFAULT_SETTINGS) as Settings;
   // Merge defaults (in case of new fields added later)
@@ -29,6 +47,12 @@ export function getSettings(): Settings {
   // Env var fallback for Groq key
   if (!merged.groqApiKey && process.env.GROQ_API_KEY) {
     merged.groqApiKey = process.env.GROQ_API_KEY;
+  }
+  // One-way mode migration — idempotent, only rewrites legacy strings.
+  const migrated = MODE_MIGRATION[merged.mode as unknown as string];
+  if (migrated) {
+    merged.mode = migrated;
+    try { (store() as any).set('settings.mode', migrated); } catch { /* ignore */ }
   }
   return merged;
 }

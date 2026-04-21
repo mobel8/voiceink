@@ -1,13 +1,10 @@
 import { Mode } from '../../shared/types';
 
 export const MODE_LABELS: Record<Mode, { label: string; desc: string; icon: string }> = {
-  raw: { label: 'Brut', desc: 'Texte tel quel, sans retouche', icon: '✒️' },
-  email: { label: 'Email', desc: 'Email professionnel clair', icon: '✉️' },
-  message: { label: 'Message', desc: 'Message court et naturel', icon: '💬' },
-  meeting: { label: 'Réunion', desc: 'Notes structurées', icon: '📝' },
-  summary: { label: 'Résumé', desc: 'Synthèse concise', icon: '📄' },
-  formal: { label: 'Formel', desc: 'Registre soutenu', icon: '🎩' },
-  simple: { label: 'Simple', desc: 'Clair et accessible', icon: '🌱' },
+  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',     icon: '✒️' },
+  natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte', icon: '🪶' },
+  formal:  { label: 'Formel',  desc: 'Registre soutenu, courtois, phrases complètes',    icon: '🎩' },
+  message: { label: 'Message', desc: 'Court, conversationnel, 1 à 3 phrases',             icon: '💬' },
 };
 
 export const SUPPORTED_LANGUAGES = [
