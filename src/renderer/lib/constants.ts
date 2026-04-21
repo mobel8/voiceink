@@ -1,4 +1,4 @@
-import { FileText, Feather, Scroll, MessageSquare, type LucideIcon } from 'lucide-react';
+import { Mic, Feather, PenTool, MessageSquare, type LucideIcon } from 'lucide-react';
 import { Mode } from '../../shared/types';
 
 /**
@@ -14,6 +14,13 @@ import { Mode } from '../../shared/types';
  *             so the chip swaps its leading icon when the user changes
  *             mode, matching the rest of the picker chips (language,
  *             translate) which all use Lucide line icons.
+ *
+ * Each (emoji, Lucide) pair tells the same story so the chip and the
+ * dropdown stay visually coherent:
+ *   raw     → 🎙️  + Mic          (voice captured as-is, no post-processing)
+ *   natural → 🪶  + Feather      (light touch, keep the dictated voice intact)
+ *   formal  → 🖋️  + PenTool      (crafted formal writing, elevated register)
+ *   message → 💬  + MessageSquare (compressed, conversational chat reply)
  */
 export const MODE_LABELS: Record<Mode, {
   label: string;
@@ -21,9 +28,9 @@ export const MODE_LABELS: Record<Mode, {
   icon: string;
   Icon: LucideIcon;
 }> = {
-  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '📝', Icon: FileText },
+  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '🎙️', Icon: Mic },
   natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte',    icon: '🪶', Icon: Feather },
-  formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '📜', Icon: Scroll },
+  formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '�️', Icon: PenTool },
   message: { label: 'Message', desc: 'Compression courte, conversationnel, 1 à 3 phrases',    icon: '💬', Icon: MessageSquare },
 };
 
