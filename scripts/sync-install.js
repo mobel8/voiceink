@@ -112,12 +112,40 @@ for (const sub of ['dist', 'assets']) {
 //     installer handles dep bumps anyway.
 
 // ---- 5. Repack --------------------------------------------------------
-console.log('[sync-install] repacking asar...');
-asar.createPackage(tmp, installedAsar)
+//
+// CRITICAL: we MUST unpack native modules (.node files) to
+// `app.asar.unpacked/` next to the asar. Electron cannot dlopen a
+// native shared library from inside an asar — the first call that
+// needs a native module (koffi, better-sqlite3, etc.) silently fails
+// at module-load time and the main process exits before any JS runs,
+// including our own error handlers. electron-builder does this
+// automatically for us at package time, and we need to mirror it at
+// hot-sync time or the patched install is instantly broken.
+//
+// The unpack glob matches every .node file anywhere in the tree; the
+// dirs list lives alongside for completeness (some packages ship
+// native blobs under non-.node extensions, e.g. prebuilt tarballs).
+const sizeBefore = fs.statSync(installedAsar).size;
+console.log('[sync-install] repacking asar (unpacking *.node)…');
+asar.createPackageWithOptions(tmp, installedAsar, {
+  unpack: '**/*.node',
+  unpackDir: '**/{koffi,build-release,build-debug}/**',
+})
   .then(() => {
     fs.rmSync(tmp, { recursive: true, force: true });
+    const sizeAfter = fs.statSync(installedAsar).size;
     console.log('[sync-install] repacked',
-      '(', (fs.statSync(installedAsar).size / 1e6).toFixed(2), 'MB)');
+      '(', (sizeAfter / 1e6).toFixed(2), 'MB, was',
+      (sizeBefore / 1e6).toFixed(2), 'MB )');
+    // Defensive: if the new asar is dramatically bigger, we probably
+    // failed to unpack something that used to be external. Warn loudly
+    // so the dev can stop and inspect rather than silently ship a
+    // broken hot-sync.
+    if (sizeAfter > sizeBefore * 1.5 && sizeAfter - sizeBefore > 5e6) {
+      console.warn('[sync-install] ⚠ repacked asar is',
+        ((sizeAfter / sizeBefore - 1) * 100).toFixed(0) + '% larger',
+        '— likely inlined native modules that should stay unpacked.');
+    }
 
     // ---- 6. Relaunch --------------------------------------------------
     console.log('[sync-install] launching', exe);

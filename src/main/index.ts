@@ -207,8 +207,17 @@ function buildWindow(density: Density): WindowCtx {
       paintWhenInitiallyHidden: true,
       webPreferences: commonWebPrefs,
     });
-    // 'screen-saver' level keeps the pill above fullscreen videos etc.
-    win.setAlwaysOnTop(true, 'screen-saver');
+    // 'floating' (HWND_TOPMOST) — stays above every ordinary window
+    // without forcing DirectX-exclusive fullscreen apps to exit their
+    // mode the way 'screen-saver' did. The previous 'screen-saver'
+    // level triggered WM_WINDOWPOSCHANGED broadcasts when the pill was
+    // showInactive()'d, and many fullscreen apps react to those by
+    // resizing / repositioning / switching out of fullscreen — which
+    // is exactly what the user saw "en arrière-plan ou sur l'écran".
+    // 'floating' keeps the pill visible above ordinary and composited
+    // borderless-fullscreen content (videos, browser fullscreen) and
+    // is the same level the comfortable main window uses.
+    win.setAlwaysOnTop(true, 'floating');
   } else {
     win = new BrowserWindow({
       width: COMFORTABLE.w,

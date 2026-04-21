@@ -2,7 +2,10 @@ import { clipboard, BrowserWindow } from 'electron';
 import { exec } from 'child_process';
 import { platform } from 'os';
 import { getLastExternalHwnd } from './focus';
-import { getWin32, VK } from './win32';
+import { getWin32, pointerToHwnd, VK } from './win32';
+
+/** Win32 ShowWindow verbs we actually use. */
+const SW_RESTORE = 9;
 
 export function copyToClipboard(text: string): void {
   clipboard.writeText(text);
@@ -64,8 +67,6 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
   const w = getWin32();
   if (!w) return false;
 
-  const SW_SHOW = 5;
-
   try {
     if (hwnd) {
       try {
@@ -73,16 +74,33 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
         // Validate still a window (target may have closed between poll and now).
         const valid = w.IsWindow(h);
         if (valid) {
-          // Try to unminimise if needed, then bring to foreground.
-          w.ShowWindow(h, SW_SHOW);
-          const ok = w.SetForegroundWindow(h);
-          if (!ok) {
-            // SetForegroundWindow can fail due to Win32 focus-stealing
-            // prevention. AttachThreadInput trick often works as a
-            // fallback — but is noisy; we just log and proceed. The
-            // paste may still land correctly if the target was already
-            // the foreground (common when using global shortcut).
-            console.log('[inject] SetForegroundWindow returned 0, proceeding anyway');
+          // Only un-minimise if the window is actually iconic. Calling
+          // ShowWindow(SW_SHOW) on a non-minimised window is NOT a
+          // no-op: fullscreen / exclusive apps redraw and can exit
+          // their fullscreen state. SW_RESTORE is the proper verb for
+          // "un-minimise without activating any more than necessary".
+          if (w.IsIconic(h)) {
+            w.ShowWindow(h, SW_RESTORE);
+          }
+          // Only re-foreground the target if it's not already the
+          // foreground window. In the common case (user pressed the
+          // global shortcut, pill appeared via showInactive which
+          // doesn't steal focus), the target was foreground all along
+          // — calling SetForegroundWindow(target) then is redundant
+          // and triggers extra activation work that some fullscreen
+          // apps misinterpret as a focus-change, causing them to
+          // reposition or exit fullscreen.
+          const currentFgPtr = w.GetForegroundWindow();
+          const currentFg = pointerToHwnd(currentFgPtr, w);
+          if (currentFg !== hwnd) {
+            const ok = w.SetForegroundWindow(h);
+            if (!ok) {
+              // SetForegroundWindow can fail due to Win32 focus-stealing
+              // prevention. We log and proceed — the paste may still
+              // land correctly because keybd_event targets whichever
+              // window currently has the keyboard focus.
+              console.log('[inject] SetForegroundWindow returned 0, proceeding anyway');
+            }
           }
         }
       } catch (e: any) {

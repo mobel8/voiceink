@@ -24,6 +24,7 @@ export interface Win32Api {
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
   BringWindowToTop: (hwnd: bigint) => number;
   IsWindow: (hwnd: bigint) => number;
+  IsIconic: (hwnd: bigint) => number;             // non-zero if minimized
   ShowWindow: (hwnd: bigint, cmdShow: number) => number;
   AttachThreadInput: (idAttach: number, idAttachTo: number, attach: number) => number;
   GetWindowThreadProcessId: (hwnd: bigint, pid: any) => number;
@@ -60,6 +61,7 @@ export function getWin32(): Win32Api | null {
     );
     const BringWindowToTop = user32.func('int __stdcall BringWindowToTop(void* hWnd)');
     const IsWindow = user32.func('int __stdcall IsWindow(void* hWnd)');
+    const IsIconic = user32.func('int __stdcall IsIconic(void* hWnd)');
     const ShowWindow = user32.func('int __stdcall ShowWindow(void* hWnd, int nCmdShow)');
     const AttachThreadInput = user32.func(
       'int __stdcall AttachThreadInput(uint32_t idAttach, uint32_t idAttachTo, int fAttach)',
@@ -79,6 +81,7 @@ export function getWin32(): Win32Api | null {
       keybd_event,
       BringWindowToTop,
       IsWindow,
+      IsIconic,
       ShowWindow,
       AttachThreadInput,
       GetWindowThreadProcessId,
