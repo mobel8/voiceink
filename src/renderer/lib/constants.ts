@@ -1,4 +1,4 @@
-import { Mic, Feather, PenTool, MessageSquare, type LucideIcon } from 'lucide-react';
+import { Mic, Leaf, Briefcase, MessageSquare, type LucideIcon } from 'lucide-react';
 import { Mode } from '../../shared/types';
 
 /**
@@ -15,11 +15,15 @@ import { Mode } from '../../shared/types';
  *             mode, matching the rest of the picker chips (language,
  *             translate) which all use Lucide line icons.
  *
- * Each (emoji, Lucide) pair tells the same story so the chip and the
- * dropdown stay visually coherent:
- *   raw     → 🎙️  + Mic          (voice captured as-is, no post-processing)
- *   natural → 🪶  + Feather      (light touch, keep the dictated voice intact)
- *   formal  → 🖋️  + PenTool      (crafted formal writing, elevated register)
+ * The four emojis below are deliberately picked from Emoji 1.0 (2010),
+ * single-codepoint, no variation selector (VS16). That combination
+ * renders correctly on every Windows 10+ build without depending on
+ * the Emoji 13.0 data file. Any fancier emoji (🪶 feather 2020, 🖋️
+ * fountain pen with VS16) triggered tofu rectangles on some systems.
+ *
+ *   raw     → �  + Mic          (voice captured as-is, no post-processing)
+ *   natural → 🍃  + Leaf         (natural, light flow of speech)
+ *   formal  → �  + Briefcase    (professional, elevated register)
  *   message → 💬  + MessageSquare (compressed, conversational chat reply)
  */
 export const MODE_LABELS: Record<Mode, {
@@ -28,9 +32,9 @@ export const MODE_LABELS: Record<Mode, {
   icon: string;
   Icon: LucideIcon;
 }> = {
-  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '🎙️', Icon: Mic },
-  natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte',    icon: '🪶', Icon: Feather },
-  formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '�️', Icon: PenTool },
+  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '�', Icon: Mic },
+  natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte',    icon: '🍃', Icon: Leaf },
+  formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '👔', Icon: Briefcase },
   message: { label: 'Message', desc: 'Compression courte, conversationnel, 1 à 3 phrases',    icon: '💬', Icon: MessageSquare },
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "voiceink",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
   "author": {
     "name": "VoiceInk",

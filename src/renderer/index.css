@@ -59,7 +59,9 @@ html, body, #root { height: 100%; margin: 0; }
 html { color-scheme: dark; }
 
 body {
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system,
+               'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji',
+               sans-serif;
   font-feature-settings: 'cv11','ss01','ss03';
   color: var(--text);
   background: var(--bg-0);

@@ -5,6 +5,20 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.1.2] — 2026-04-21
+
+### Corrigé
+- **Emojis des modes qui s'affichaient en carré vide** sur certains postes Windows. Deux causes combinées :
+  - La chaîne `font-family` du `body` n'incluait aucune police emoji explicite. Ajout de `Segoe UI Emoji`, `Apple Color Emoji`, `Noto Color Emoji` à la fin de la chaîne — elles ne contiennent que des glyphs emoji donc ne perturbent pas le rendu du texte latin rendu par Inter / Segoe UI.
+  - Certains emojis précédents reposaient sur un sélecteur de variation (`U+FE0F`) ou sur Emoji 13.0 (2020), ce qui n'est pas gérable de façon fiable par tous les builds de Windows 10. Remplacés par des emojis Emoji 1.0 (2010), à code-point unique, sans VS16 :
+    - Brut : `🎙️` → `🎤` (micro simple)
+    - Naturel : `🪶` → `🍃` (feuille au vent, symbole naturel éprouvé)
+    - Formel : `🖋️` → `👔` (cravate, symbole professionnel universel)
+    - Message : `💬` inchangé
+- **Icônes Lucide ré-accordées** aux nouveaux emojis pour garder la cohérence entre le chip de sélection et la liste déroulante :
+  - Naturel : `Feather` → `Leaf`
+  - Formel : `PenTool` → `Briefcase`
+
 ## [1.1.1] — 2026-04-21
 
 ### Modifié
