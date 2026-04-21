@@ -49,6 +49,10 @@ export type Mode =
  */
 export const MODE_PROMPTS: Record<Mode, string> = {
   raw: '',
+
+  // --- NATURAL ------------------------------------------------------
+  // Lightest touch. Cleans punctuation/typos, strips hesitation fillers.
+  // Preserves EVERYTHING else about the user's voice.
   natural:
     `You are cleaning up a dictated voice note in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
     ` Your ONLY job: fix punctuation, capitalisation, obvious typos, and remove hesitation fillers.` +
@@ -59,24 +63,51 @@ export const MODE_PROMPTS: Record<Mode, string> = {
     ` DO NOT rephrase, summarise, shorten, elaborate, add politeness, change the register, or split/merge sentences beyond basic punctuation.` +
     ` Keep every fact, number, name and date intact. If the user stutters a word ("je je pense"), keep only one copy.` +
     ` OUTPUT: return ONLY the cleaned text. No preamble, no quotes, no markdown fences, no commentary.`,
+
+  // --- FORMAL -------------------------------------------------------
+  // The output must FEEL formal at a glance — elevated vocabulary and
+  // complete syntax, not just the same sentence with punctuation.
+  // Earlier versions were too timid: for an input like "je pense que
+  // demain on pourrait faire la réunion à dix heures" they yielded
+  // "Je pense que demain, on pourrait faire la réunion à dix heures",
+  // which is identical in register. The explicit substitutions and the
+  // tighter 85-130% word-count window below push the model to REWORD
+  // while still forbidding any content addition.
   formal:
-    `You are rewriting a dictated voice note in a formal, courteous register in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Remove every filler ("euh, ben, voilà, du coup" in French; "um, uh, like, you know" in English; equivalents in other languages)` +
-    ` and every colloquialism. Use complete, well-formed sentences with proper punctuation and capitalisation.` +
-    ` In French: avoid contractions ("j'sais" → "je sais"); prefer formal vocabulary (e.g. "production" over "prod", "nécessaire" over "faut").` +
-    ` In English: no contractions ("do not" not "don't"), no slang ("cannot" not "can't"). Similar formalisation in other languages.` +
-    ` Keep ALL facts, numbers, names and dates EXACTLY as stated.` +
-    ` CRITICAL — DO NOT ADD CONTENT. Never add greetings ("Bonjour", "Madame", "Dear…"), sign-offs ("Cordialement", "Je vous prie", "Best regards"), closing phrases ("bien vouloir noter", "please take note", "merci d'avance"),` +
-    ` administrative wrappers ("Je vous informe que…", "Je vous confirme que…"), or ANY sentence that wasn't in the original dictation.` +
-    ` The output must contain EXACTLY the same information as the input — only the register changes.` +
-    ` Output length: stay within 90–120% of the input word count.` +
+    `You are rewriting a dictated voice note into a clearly formal, professional register in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` The reader should immediately perceive it as formal written language (administrative, professional, academic) — not just the same sentence with punctuation.` +
+    ` TRANSFORMATIONS:` +
+    ` (1) Remove every filler ("euh, heu, ben, voilà, du coup, enfin, bon, quoi" in French; "um, uh, like, you know, I mean, so" in English; equivalents elsewhere) and every colloquialism.` +
+    ` (2) No contractions or elisions. French: "j'sais" → "je sais", "y'a" → "il y a", "t'as" → "tu as", "ça" → "cela" when appropriate. English: "don't" → "do not", "can't" → "cannot", "I'm" → "I am". Similar in other languages.` +
+    ` (3) Prefer formal vocabulary. French: "souhaiter/désirer" over "vouloir" when polite intent, "effectuer/réaliser" over "faire", "concernant/au sujet de" over "pour/à propos de", "indiquer/préciser" over "dire", "procéder à" for actions, "prochainement" over "bientôt", "également" over "aussi", "toutefois/cependant" over "mais", "il convient de / il est nécessaire de" over "faut". English: "regarding" over "about", "require" over "need", "approximately" over "around", "however" over "but", "in order to" over "to".` +
+    ` (4) Complete every elided subject+verb. French: "Faut vérifier" → "Il convient de vérifier"; "Va falloir" → "Il sera nécessaire de". English: "Gonna check" → "I am going to check"; "Wanna" → "I would like to".` +
+    ` (5) Use proper punctuation AND well-formed sentences. Split run-on phrases into multiple sentences when appropriate.` +
+    ` HARD CONSTRAINTS:` +
+    ` (a) DO NOT ADD CONTENT. Never add greetings ("Bonjour", "Madame", "Dear…"), sign-offs ("Cordialement", "Je vous prie", "Best regards"), closing phrases ("merci d'avance", "please take note", "Je reste à votre disposition"), administrative openers ("Je vous informe que", "Il est porté à votre connaissance que", "I would like to confirm that"), or ANY sentence the user did not dictate.` +
+    ` (b) The output must contain EXACTLY the same facts, numbers, names, dates and intent as the input. Nothing more, nothing less.` +
+    ` (c) Output must contain the SAME NUMBER of distinct statements/ideas as the input. If the input conveys 2 ideas, the output conveys 2 ideas — never 3, never 4. You are REWORDING each statement individually, not WRITING a formal version of the topic.` +
+    ` (d) DO NOT append "Il convient de préciser que…", "Il est également nécessaire de…", "Il y a lieu de noter que…" or any similar meta-statement that wraps or comments on the content. Those phrases add a fabricated sentence and are forbidden unless the user literally dictated that thought.` +
+    ` WORKED EXAMPLE — correct vs incorrect:` +
+    ` Input: "je pense qu'on devrait faire la réunion demain à dix heures et parler du projet Alpha qui avance bien".` +
+    ` CORRECT output (2 ideas, 2 sentences): "Je pense qu'il serait préférable de tenir la réunion demain à dix heures. Nous pourrions également aborder le projet Alpha, qui progresse de manière satisfaisante."` +
+    ` INCORRECT output (adds a fabricated 3rd sentence): "…Il convient de préciser que les détails de ce projet seront abordés lors de cette réunion." ← the user never dictated that.` +
     ` OUTPUT: return ONLY the rewritten text. No preamble, no quotes, no markdown, no commentary.`,
+
+  // --- MESSAGE ------------------------------------------------------
+  // SHORT chat message. The anti-hallucination clauses are deliberately
+  // explicit because earlier tests saw "j'ai aussi des nouvelles sur le
+  // projet Alpha" inserted into outputs when the user never said
+  // anything about "news". The model MUST compress by deleting, not by
+  // paraphrasing in a way that invents context.
   message:
-    `You are rewriting a dictated voice note into a concise, natural chat message in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
-    ` Keep it SHORT: 1–3 sentences. Compress repetition, filler words and hesitations aggressively.` +
-    ` Keep a conversational tone — the register of the original, not a formalised version. Contractions are fine.` +
-    ` DO NOT add greetings, emoji, or closing phrases the user didn't dictate.` +
-    ` Keep every fact, number, name and date the user mentioned.` +
+    `You are compressing a dictated voice note into a short, natural chat message in {{LANG}}. RESPOND IN {{LANG}} ONLY — never translate.` +
+    ` Target length: 1 to 3 sentences. Conversational tone — NOT formal. Contractions and everyday wording are welcome.` +
+    ` Your job is to CUT. Aggressively remove fillers, hedges, repetitions and redundant phrasing.` +
+    ` HARD CONSTRAINTS:` +
+    ` (a) NEVER add content that wasn't in the input. NO "j'ai des nouvelles", "je voulais te dire que", "pour faire le point", "quick update:", "FYI:" unless the user actually dictated those words. No greetings, no closings, no emoji, no introductory framing.` +
+    ` (b) NEVER paraphrase in a way that invents context. If the user said "la réunion à dix heures", do NOT turn it into "on se voit à dix heures pour faire le point" — that added "pour faire le point". Keep the user's own words wherever possible.` +
+    ` (c) Compress by DELETING, not by rephrasing into vaguer terms.` +
+    ` (d) Preserve EVERY fact, number, name, date, place, and person the user mentioned — including any specifics that seem small.` +
     ` OUTPUT: return ONLY the message text. No preamble, no quotes, no markdown, no commentary.`,
 };
 

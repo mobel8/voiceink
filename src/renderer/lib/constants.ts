@@ -1,10 +1,30 @@
+import { FileText, Feather, Scroll, MessageSquare, type LucideIcon } from 'lucide-react';
 import { Mode } from '../../shared/types';
 
-export const MODE_LABELS: Record<Mode, { label: string; desc: string; icon: string }> = {
-  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',     icon: '✒️' },
-  natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte', icon: '🪶' },
-  formal:  { label: 'Formel',  desc: 'Registre soutenu, courtois, phrases complètes',    icon: '🎩' },
-  message: { label: 'Message', desc: 'Court, conversationnel, 1 à 3 phrases',             icon: '💬' },
+/**
+ * Per-mode presentation data.
+ *
+ *   - label : short French name shown in dropdowns.
+ *   - desc  : one-line description for settings / tooltips.
+ *   - icon  : emoji string. Kept because <option> elements and the
+ *             history-badge can't render React components, so those two
+ *             call sites inline the emoji directly. Persisted history
+ *             entries also still reference this field shape.
+ *   - Icon  : Lucide React component. Used by <ModePicker> in MainView
+ *             so the chip swaps its leading icon when the user changes
+ *             mode, matching the rest of the picker chips (language,
+ *             translate) which all use Lucide line icons.
+ */
+export const MODE_LABELS: Record<Mode, {
+  label: string;
+  desc: string;
+  icon: string;
+  Icon: LucideIcon;
+}> = {
+  raw:     { label: 'Brut',    desc: 'Transcription exacte, aucun post-traitement',            icon: '📝', Icon: FileText },
+  natural: { label: 'Naturel', desc: 'Ponctuation + retrait des hésitations, voix intacte',    icon: '🪶', Icon: Feather },
+  formal:  { label: 'Formel',  desc: 'Registre soutenu, vocabulaire élevé, phrases complètes', icon: '📜', Icon: Scroll },
+  message: { label: 'Message', desc: 'Compression courte, conversationnel, 1 à 3 phrases',    icon: '💬', Icon: MessageSquare },
 };
 
 export const SUPPORTED_LANGUAGES = [

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Sparkles, Globe } from 'lucide-react';
+import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Globe } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS } from '../lib/constants';
@@ -258,9 +258,10 @@ export function MainView() {
 function ModePicker() {
   const { settings, updateSettings } = useStore();
   const active = settings.mode !== 'raw';
+  const ModeIcon = MODE_LABELS[settings.mode].Icon;
   return (
-    <label className={`picker-chip ${active ? 'is-active' : ''}`} title="Mode de post-traitement">
-      <Sparkles size={12} className="picker-chip-icon" />
+    <label className={`picker-chip ${active ? 'is-active' : ''}`} title={MODE_LABELS[settings.mode].desc}>
+      <ModeIcon size={12} className="picker-chip-icon" />
       <select
         value={settings.mode}
         onChange={(e) => updateSettings({ mode: e.target.value as Mode })}
