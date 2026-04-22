@@ -282,7 +282,18 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   // runs. The suffix is harmless otherwise — the density bootstrap just
   // ignores anything it doesn't recognise.
   const sampler = process.env.VOICEINK_PILL_SAMPLER === '1' ? '-sampler' : '';
-  const hash = ctx.density + sampler;
+  // Smoke-test hook: `VOICEINK_START_VIEW=<view>` forces the renderer
+  // to land on that view on first render (bypasses the default 'main'
+  // in the Zustand store). Used by `scripts/_smoke-settings.js` to
+  // verify SettingsView actually mounts without throwing a
+  // ReferenceError — the kind of bug the type-check in _build-renderer
+  // already catches at build time, but we double-check at runtime too.
+  // The suffix is parsed by `initialView()` in `useStore.ts`.
+  const startView = process.env.VOICEINK_START_VIEW;
+  const viewSuffix = (startView === 'main' || startView === 'history' || startView === 'settings')
+    ? `;view=${startView}`
+    : '';
+  const hash = ctx.density + sampler + viewSuffix;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
     if (process.env.VOICEINK_DEVTOOLS === '1' && ctx.density === 'comfortable') {

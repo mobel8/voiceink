@@ -5,6 +5,25 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.5.1] — 2026-04-22
+
+### Corrigé (hotfix critique)
+
+- **`ReferenceError: SpeedSlider is not defined` dans la vue Paramètres.** Dans le build 1.5.0, l'import `import { SpeedSlider } from './SpeedSlider'` avait disparu de `@d:\voiceink\src\renderer\components\SettingsView.tsx` pendant les refactorings, mais la balise `<SpeedSlider …>` restait dans le JSX. Esbuild (le transformer interne de Vite) ne fait que **stripper les types** — il ne vérifie pas la résolution des symboles. Résultat : `npm run build` réussissait, le bundle partait en production, puis explosait au runtime dès qu'on cliquait sur « Paramètres » (rendu bloqué, vue vide, impossible d'interagir). L'import est restauré.
+- **Double garde-fou pour prévenir toute régression de ce type :**
+  1. `scripts/_build-renderer.js` exécute désormais `tsc --noEmit` AVANT Vite. Tout symbole non importé ou mal typé fait échouer le build, avec un diagnostic clair (fichier + ligne + colonne). Impact : +3 s par build, contre une classe entière de bugs fatals en production.
+  2. `scripts/_smoke-settings.js` (nouveau) boote l'Electron packagé avec `VOICEINK_START_VIEW=settings`, attend 12 s, et grep stdout/stderr pour `ReferenceError` / `Uncaught TypeError`. À exécuter avant chaque release. Passe en ~15 s.
+
+### Ajouté (plomberie de test)
+
+- **`VOICEINK_START_VIEW`** — variable d'environnement lue par `src/main/index.ts`. Si elle vaut `main`, `history` ou `settings`, le main injecte `;view=<X>` dans l'URL hash du renderer, et `useStore` lit ce suffixe au boot pour atterrir directement sur la vue correspondante. Utilisé uniquement par le smoke test — la dictée en production continue d'ouvrir `main` par défaut.
+
+### Notes techniques
+
+- `tsc --noEmit` est sauté quand `SKIP_TSC=1` est défini (pour les itérations dev très rapides). Désactivé par défaut pour que chaque build de release soit typé.
+- Le smoke test gère lui-même le kill des Electron résiduels, purge `ELECTRON_RUN_AS_NODE` de l'env (cause silencieuse de faux-positifs quand le parent shell héritait ce flag), et attend que le lock du single-instance soit relâché avant de spawner.
+- Le bundle final fait 313 KB (+4 KB vs 1.5.0 buggy) parce que `SpeedSlider` est maintenant correctement inclus dans le chunk renderer.
+
 ## [1.5.0] — 2026-04-22
 
 ### Corrigé (bug critique interprète continu)

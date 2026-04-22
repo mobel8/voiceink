@@ -15,10 +15,27 @@ function initialDensity(): Settings['density'] {
   if (typeof location === 'undefined') return DEFAULT_SETTINGS.density;
   let h = (location.hash || '').replace('#', '');
   // Strip the optional `-sampler` test suffix appended by main when
-  // VOICEINK_PILL_SAMPLER=1 is set.
-  h = h.replace(/-sampler$/, '');
+  // VOICEINK_PILL_SAMPLER=1 is set, and any smoke-test `;view=…` suffix
+  // injected by `VOICEINK_START_VIEW`.
+  h = h.replace(/-sampler/, '').replace(/;view=\w+$/, '');
   if (h === 'compact' || h === 'comfortable') return h as Settings['density'];
   return DEFAULT_SETTINGS.density;
+}
+
+/**
+ * Smoke-test hook: if the main process put `;view=settings` (or
+ * `history`) into the URL hash — driven by the `VOICEINK_START_VIEW`
+ * env var — land the renderer directly on that view instead of the
+ * default 'main'. Lets external test scripts verify the view mounts
+ * cleanly without needing to simulate a sidebar click.
+ *
+ * Never used in normal operation — the suffix is only ever emitted
+ * when the env var is set.
+ */
+function initialView(): View {
+  if (typeof location === 'undefined') return 'main';
+  const m = (location.hash || '').match(/;view=(main|history|settings)/);
+  return (m ? m[1] : 'main') as View;
 }
 
 /**
@@ -60,7 +77,7 @@ interface State {
 declare global { interface Window { voiceink: any } }
 
 export const useStore = create<State>()((set, get) => ({
-  view: 'main',
+  view: initialView(),
   setView: (v) => set({ view: v }),
 
   settings: INITIAL_SETTINGS,

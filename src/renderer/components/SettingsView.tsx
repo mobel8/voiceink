@@ -7,6 +7,7 @@ import { AppearanceSection } from './AppearanceSection';
 import { ReplacementsSection } from './ReplacementsSection';
 import { VoicePicker } from './VoicePicker';
 import { AudioDevicePicker } from './AudioDevicePicker';
+import { SpeedSlider } from './SpeedSlider';
 
 export function SettingsView() {
   const { settings, updateSettings } = useStore();
