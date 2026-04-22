@@ -453,18 +453,6 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   );
 }
 
-/**
- * Client-side mirror of `toCartesiaSpeed()` in `src/main/engines/tts/cartesia.ts`.
- * Kept in sync manually — if you change the thresholds in the main process,
- * update both sides so the UI label matches the actual payload sent.
- */
-function speedBucketFor(ttsSpeed: number): 'slowest' | 'slow' | 'normal' | 'fast' | 'fastest' {
-  if (ttsSpeed <= 0.65) return 'slowest';
-  if (ttsSpeed <= 0.85) return 'slow';
-  if (ttsSpeed <  1.15) return 'normal';
-  if (ttsSpeed <  1.45) return 'fast';
-  return 'fastest';
-}
 
 /**
  * Voice interpreter configuration — provider + per-provider voice
@@ -630,41 +618,11 @@ function InterpreterSection() {
             </p>
           </div>
 
-          {/* Speed */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="label">Vitesse de parole</div>
-              <span className="text-xs text-white/60 font-mono inline-flex items-center gap-2">
-                <span>{(settings.ttsSpeed ?? 1.0).toFixed(2)}×</span>
-                {providerId === 'cartesia' && (
-                  <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] uppercase tracking-wide">
-                    {speedBucketFor(settings.ttsSpeed ?? 1.0)}
-                  </span>
-                )}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0.5}
-              max={2.0}
-              step={0.05}
-              value={settings.ttsSpeed ?? 1.0}
-              onChange={(e) => save({ ttsSpeed: parseFloat(e.target.value) })}
-              className="w-full"
-            />
-            <div className="flex justify-between text-[10px] text-white/30 mt-1">
-              <span>0.5× (lent)</span>
-              <span>1.0× (naturel)</span>
-              <span>2.0× (rapide)</span>
-            </div>
-            <p className="text-[11px] text-white/40 mt-2">
-              {providerId === 'cartesia'
-                ? <>Cartesia Sonic-2 quantise la vitesse en 5 paliers (<code>slowest</code>, <code>slow</code>, <code>normal</code>, <code>fast</code>, <code>fastest</code>). <strong>Baisser à <em>slowest</em> ajoute ~20% de durée</strong> — utile si vous voulez que la traduction ait le temps de rattraper un débit rapide.</>
-                : providerId === 'elevenlabs'
-                ? <>ElevenLabs Flash v2.5 accepte une vitesse continue entre 0.7 et 1.2 (clampée). Au-delà, la valeur est ramenée dans la plage.</>
-                : <>OpenAI <code>gpt-4o-mini-tts</code> accepte 0.25 – 4.0 mais la qualité se dégrade hors de 0.75 – 1.25.</>}
-            </p>
-          </div>
+          <SpeedSlider
+            value={settings.ttsSpeed ?? 1.0}
+            onChange={(next) => save({ ttsSpeed: next })}
+            provider={providerId}
+          />
 
           {/* Audio output routing — virtual mic for Discord / Zoom / Meet */}
           <div className="pt-2 border-t border-white/5">

@@ -5,6 +5,35 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.5.0] — 2026-04-22
+
+### Corrigé (bug critique interprète continu)
+
+- **Les phrases traduites ne se chevauchent plus en mode interprète simultané.** Avant ce fix, si vous enchaîniez deux phrases rapprochées, les deux voix de sortie jouaient **en parallèle** (on n'entendait plus rien de compréhensible). Chaque phrase créait un nouvel `InterpretPlayer` avec `autoplay = true` qui démarrait dès le premier chunk audio reçu. Désormais une queue FIFO stricte (`InterpretPlayerQueue` dans `src/renderer/lib/interpret-player.ts`) impose **une seule voix à la fois** : les phrases suivantes bufferisent silencieusement leurs chunks MP3 pendant que la phrase en cours finit de parler, puis démarrent. La traduction continue de s'exécuter en parallèle côté serveur pour ne pas perdre le gain de latence, mais le playback est rigoureusement séquentiel.
+- **Même correctif appliqué au mode Écoute (listener).** Les segments TTS des conversations écoutées utilisent maintenant la même queue. Si l'interlocuteur débite plusieurs phrases rapidement, on entend A puis B puis C sans jamais de superposition.
+
+### Corrigé (UI)
+
+- **Contraste des dropdowns** dans `VoicePicker` (« Toutes langues » / « Tous genres ») et partout ailleurs. Les `<option>` natives apparaissaient en blanc-sur-blanc sur Windows quand Chromium rendait la liste déroulante avec les couleurs OS. Règle CSS globale `select option { background: var(--bg-1); color: var(--text); }` + `color-scheme: dark` forcé — toutes les listes déroulantes de l'app suivent désormais le thème actif (y compris les thèmes custom).
+
+### Ajouté
+
+- **Picker voix & vitesse directement dans la vue dictée** — nouveau bouton engrenage à côté du chip « Interprète vocal ». Clic → popover compact avec le `VoicePicker` complet (recherche, filtres langue/genre, aperçu audio) + le `SpeedSlider` en mode dense. Plus besoin de plonger dans Paramètres pour changer de voix en cours de session. Fermeture automatique sur clic extérieur ou Échap.
+- **`SpeedSlider` extrait en composant réutilisable** (`src/renderer/components/SpeedSlider.tsx`) avec deux densités (`full` dans Paramètres, `compact` dans le popover). Un seul endroit définit désormais les paliers Cartesia et les hints par fournisseur.
+- **`InterpretPlayerQueue` exposée** pour futurs consommateurs (`speak` IPC, autres pipelines vocaux). API : `add()` / `advance()` / `route()` / `disposeAll()` / `size()`.
+- **`src/renderer/lib/blob.ts`** — `blobToBase64()` centralisé. Élimine 4 copies identiques (dans `MainView`, `CompactView`, `useContinuousInterpreter`, `useListener`).
+
+### Modifié
+
+- **`InterpretPlayer` accepte `{ autoStart }`** (défaut `true` pour garder la rétro-compatibilité du dictateur one-shot). `false` = buffer seulement, `start()` pour autoriser la playback manuellement — c'est ce que la queue utilise pour la sérialisation.
+- **`VoicePicker` accepte `extraControls?: ReactNode`** — slot propre pour que des consommateurs (comme `VoiceQuickPopover`) y injectent leur propre contrôle sans qu'on doive hardcoder une prop `speed` dans le picker.
+
+### Notes techniques
+
+- La queue est construite paresseusement à la première render (`useRef(null)` + `if (!queueRef.current) { queueRef.current = new … }`) pour que la closure d'erreur lise le bon `optsRef.current` au moment où l'erreur survient, pas celui du premier render.
+- `advance()` est idempotent : appels répétés avec le même player sont des no-op. Les 3 chemins qui retirent un player (`onEnd`, `onError`, échec IPC `interpret`) appellent tous `advance()` sans risque de double-retrait.
+- Pour migrer un composant existant vers la queue, il suffit de passer `autoStart: false` à `new InterpretPlayer(...)` et de router onEnd/onError via `queue.advance(player)`. Aucun changement sur la sémantique de playback du mode dictation one-shot.
+
 ## [1.4.1] — 2026-04-22
 
 ### Modifié (dernière passe de latence)

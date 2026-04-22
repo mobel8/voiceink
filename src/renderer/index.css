@@ -286,13 +286,35 @@ html[data-shimmer="1"] .glass-strong:hover::before {
 .textarea { resize: vertical; min-height: 88px; font-family: inherit; }
 .label { font-size: 0.75rem; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* Style the native <option> list on dark platforms. Browsers only honour
-   `background` / `color` on options in certain cases, but applying it
-   everywhere keeps the dropdown consistent with the rest of the theme. */
-.select option,
-.picker-chip option {
-  background: #0d0d18;
-  color: #e8e8ef;
+/* ------------------------------------------------------------
+   Native <select> / <option> theming — GLOBAL.
+   Tailwind utility classes (bg-white/5, text-white…) style the
+   closed select fine, but when the user clicks and the OS
+   dropdown pops open, the <option> list uses OS-native colours.
+   Without these rules, Chromium on Windows paints the list with
+   a near-white background → our white text becomes invisible.
+   We apply the theme palette to EVERY <option> (not just the
+   legacy .select/.picker-chip classes) so new components like
+   VoicePicker inherit correct contrast out of the box.
+   ------------------------------------------------------------ */
+select {
+  /* Hint to the OS to render the dropdown chrome in dark mode so
+     scrollbars, borders and the highlight band use dark-theme colours.
+     Overrides the page-level `color-scheme: dark` only if the browser
+     needs a per-element re-declaration to honour it on pop-up lists. */
+  color-scheme: dark;
+}
+select option {
+  background: var(--bg-1);
+  color: var(--text);
+}
+/* Keep the highlighted row readable against the accent colour —
+   color-mix gives a muted version of the accent that still shows
+   which item is focused without shouting. */
+select option:checked,
+select option:hover {
+  background-color: color-mix(in srgb, var(--accent-1) 28%, var(--bg-1));
+  color: var(--text);
 }
 
 /*

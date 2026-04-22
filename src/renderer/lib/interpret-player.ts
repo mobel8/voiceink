@@ -34,6 +34,19 @@ export interface InterpretPlayerOptions {
    * Empty string or undefined = use the system default output.
    */
   sinkId?: string;
+
+  /**
+   * When `true` (default), playback begins the moment the first chunk
+   * lands in the SourceBuffer — "speak as soon as we can". Useful for
+   * one-shot dictation where no serialization is needed.
+   *
+   * When `false`, incoming chunks are buffered but playback is held
+   * until `start()` is called. This is how the continuous interpreter
+   * enforces strict FIFO playback: player N+1 keeps buffering while
+   * player N finishes, then the hook calls `start()` on N+1 so the
+   * user never hears two phrases overlap.
+   */
+  autoStart?: boolean;
 }
 
 export class InterpretPlayer {
@@ -51,11 +64,19 @@ export class InterpretPlayer {
   private readonly fallbackBytes: Uint8Array[] = [];
   private useFallback = false;
 
+  /** Whether playback has been authorized (auto-start or explicit `start()`). */
+  private started: boolean;
+
   constructor(requestId: string, events: InterpretPlayerEvents = {}, options: InterpretPlayerOptions = {}) {
     this.requestId = requestId;
     this.events = events;
+    this.started = options.autoStart !== false;
     this.audio = new Audio();
-    this.audio.autoplay = true;
+    // autoplay mirrors `started` — when the hook holds us in a queue
+    // (autoStart=false), the <audio> element stays paused even once
+    // the SourceBuffer has bytes, so `chunks-in / playback-out` stay
+    // decoupled.
+    this.audio.autoplay = this.started;
     this.audio.preload = 'auto';
     this.audio.onerror = () => {
       // Media decoding error — surface as a player error but do not
@@ -167,6 +188,39 @@ export class InterpretPlayer {
     return this.ended;
   }
 
+  /**
+   * Authorize playback. No-op if the player was created with
+   * autoStart=true (default) or if `start()` has already been called.
+   *
+   * Safe to call before ANY chunks arrive: we flip `autoplay = true`
+   * so the element will play as soon as the SourceBuffer is seeded.
+   * Also safe to call AFTER chunks have arrived but playback was held:
+   * we call `audio.play()` explicitly, which returns a promise the
+   * caller can await to know when audio actually starts.
+   *
+   * Returns a promise that resolves when playback starts (or is
+   * already running). Rejects if the browser blocks playback.
+   */
+  start(): Promise<void> {
+    if (this.started) {
+      // Already playing (or ended) — just return a resolved promise so
+      // callers can await unconditionally.
+      return Promise.resolve();
+    }
+    this.started = true;
+    this.audio.autoplay = true;
+    // If the SourceBuffer (or fallback blob) is ready, `.play()`
+    // actually begins playback. If not yet, autoplay=true will kick
+    // it in when the first data lands.
+    const p = this.audio.play();
+    return p instanceof Promise ? p.catch(() => { /* blocked → onerror handles surfacing */ }) : Promise.resolve();
+  }
+
+  /** True if the player has been authorized to play. */
+  hasStarted(): boolean {
+    return this.started;
+  }
+
   /** Tear down the player, stopping playback and releasing resources. */
   dispose(): void {
     if (this.disposed) return;
@@ -215,4 +269,84 @@ function base64ToUint8Array(b64: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+/**
+ * Strict FIFO queue of `InterpretPlayer`s that guarantees playback is
+ * **serial** — only one player speaks at a time. Every other player
+ * keeps ingesting MP3 chunks into its own buffer (so translation
+ * latency overlaps with speech of earlier phrases) but stays silent
+ * until its turn comes.
+ *
+ * Used by:
+ *   - `useContinuousInterpreter` (VAD-driven, one phrase = one player)
+ *   - `ListenerPanel` (one incoming segment = one player)
+ *
+ * The whole idea is that the user hears A → B → C as three consecutive
+ * utterances, never as "A + B mumbled over each other". Translations
+ * that happen to finish out-of-order simply wait their slot.
+ */
+export class InterpretPlayerQueue {
+  private readonly queue: InterpretPlayer[] = [];
+  private readonly onErrorHook?: (err: Error) => void;
+
+  constructor(onError?: (err: Error) => void) {
+    this.onErrorHook = onError;
+  }
+
+  /**
+   * Enqueue a player. If it lands at the head (queue was empty), it
+   * starts playing immediately. Otherwise it waits for the preceding
+   * player to emit `onEnd` / `onError` before `advance()` promotes it.
+   *
+   * The player MUST be constructed with `autoStart: false` so the
+   * queue can control the start time.
+   */
+  add(player: InterpretPlayer): void {
+    this.queue.push(player);
+    if (this.queue.length === 1) {
+      player.start().catch((err) => this.onErrorHook?.(err));
+    }
+  }
+
+  /**
+   * Mark a player as terminated (naturally ended, errored, or
+   * externally disposed) and promote the next queued player if we
+   * just removed the head. Idempotent — extra calls are no-ops.
+   */
+  advance(player: InterpretPlayer): void {
+    const wasHead = this.queue[0] === player;
+    const i = this.queue.indexOf(player);
+    if (i >= 0) this.queue.splice(i, 1);
+    if (wasHead) {
+      const next = this.queue[0];
+      if (next && !next.hasStarted()) {
+        next.start().catch((err) => this.onErrorHook?.(err));
+      }
+    }
+  }
+
+  /**
+   * Route an incoming IPC chunk to the matching player. Chunks whose
+   * requestId doesn't match any player are dropped silently (handled
+   * by `InterpretPlayer.push` guard).
+   *
+   * We iterate the whole queue because iterating by Map-of-requestId
+   * is micro-optimized but not worth the complexity for the <10
+   * active players the queue ever holds.
+   */
+  route(evt: InterpretChunkEvent): void {
+    for (const p of this.queue) p.push(evt);
+  }
+
+  /** Tear everything down. Safe to call repeatedly. */
+  disposeAll(): void {
+    for (const p of this.queue) p.dispose();
+    this.queue.length = 0;
+  }
+
+  /** Diagnostic — how many players are currently buffered. */
+  size(): number {
+    return this.queue.length;
+  }
 }

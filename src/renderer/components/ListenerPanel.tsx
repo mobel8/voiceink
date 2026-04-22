@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Play, Square, Headphones, Trash2, Copy, Check, Loader2, Volume2 } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useListener } from '../hooks/useListener';
-import { InterpretPlayer } from '../lib/interpret-player';
+import { InterpretPlayer, InterpretPlayerQueue } from '../lib/interpret-player';
 import type { ListenerSegment, InterpretChunkEvent } from '../../shared/types';
 
 /**
@@ -34,17 +34,25 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const lastSpokenIdRef = useRef<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const playersRef = useRef<Map<string, InterpretPlayer>>(new Map());
+  /**
+   * Strict FIFO queue of TTS players so multiple listener segments
+   * NEVER overlap — if the other speaker emits two sentences quickly,
+   * the second one buffers quietly until the first has finished
+   * playing.
+   */
+  const queueRef = useRef<InterpretPlayerQueue | null>(null);
+  if (!queueRef.current) {
+    queueRef.current = new InterpretPlayerQueue((err) => console.warn('[listener:speak]', err.message));
+  }
 
   // Subscribe once to interpret-chunk events and route each to its
-  // player by requestId. We use a single subscription instead of one
-  // per player so the renderer doesn't pile up listeners.
+  // matching player via the queue (match-by-requestId is done inside
+  // `InterpretPlayer.push`).
   useEffect(() => {
     const api = (window as any).voiceink;
     if (!api?.onInterpretChunk) return;
     const off = api.onInterpretChunk((chunk: InterpretChunkEvent) => {
-      const p = playersRef.current.get(chunk.requestId);
-      if (p) p.push(chunk);
+      queueRef.current?.route(chunk);
     });
     return () => { try { off?.(); } catch { /* ignore */ } };
   }, []);
@@ -73,21 +81,23 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
     if (!last.translated?.trim()) return;
     lastSpokenIdRef.current = last.id;
     const requestId = `spk-${last.id}`;
+    const queue = queueRef.current!;
     const player = new InterpretPlayer(requestId, {
-      onEnd: () => playersRef.current.delete(requestId),
+      onEnd: () => queue.advance(player),
       onError: (err) => {
         console.warn('[listener:speak]', err.message);
-        playersRef.current.delete(requestId);
+        queue.advance(player);
       },
-    }, { sinkId: settings.ttsSinkId || undefined });
-    playersRef.current.set(requestId, player);
+    }, { sinkId: settings.ttsSinkId || undefined, autoStart: false });
+    queue.add(player);
     (window as any).voiceink?.speak({
       requestId,
       text: last.translated,
       language: settings.listenerTargetLang || 'fr',
     }).catch((err: any) => {
       console.warn('[listener:speak]', err?.message || err);
-      playersRef.current.delete(requestId);
+      player.dispose();
+      queue.advance(player);
     });
   }, [listener.segments, settings.listenerMode, settings.listenerTargetLang, settings.ttsSinkId]);
 

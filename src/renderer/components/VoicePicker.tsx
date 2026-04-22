@@ -74,9 +74,16 @@ interface Props {
   onChange: (voiceId: string) => void;
   /** Optional curated fallback voices shown when the catalog is empty/loading. */
   fallback?: VoiceInfo[];
+  /**
+   * Optional arbitrary React node rendered inside the expanded picker,
+   * right under the voice list. Used to embed a speed slider + any
+   * other per-voice control without hardcoding their types here. Keeps
+   * VoicePicker focused on voice selection and lets consumers compose.
+   */
+  extraControls?: React.ReactNode;
 }
 
-export function VoicePicker({ provider, apiKey, value, onChange, fallback = [] }: Props) {
+export function VoicePicker({ provider, apiKey, value, onChange, fallback = [], extraControls }: Props) {
   const [voices, setVoices] = useState<VoiceInfo[]>(() => readCache(provider, apiKey) || []);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -310,6 +317,15 @@ export function VoicePicker({ provider, apiKey, value, onChange, fallback = [] }
           <div className="text-[10px] text-white/40">
             {filtered.length} / {voices.length} voix affichées
           </div>
+
+          {/* Consumer-supplied extras (typically the SpeedSlider). Kept
+              in a separate divided block so it visually belongs to the
+              same picker without crowding the scroll list. */}
+          {extraControls && (
+            <div className="pt-3 mt-1 border-t border-white/5">
+              {extraControls}
+            </div>
+          )}
         </div>
       )}
     </div>

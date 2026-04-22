@@ -7,6 +7,8 @@ import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, INTERPRETER_LANGUA
 import { Mode } from '../../shared/types';
 import { InterpretPlayer } from '../lib/interpret-player';
 import { ListenerPanel } from './ListenerPanel';
+import { VoiceQuickPopover } from './VoiceQuickPopover';
+import { blobToBase64 } from '../lib/blob';
 
 export function MainView() {
   const {
@@ -510,17 +512,23 @@ function InterpreterPicker() {
         </button>
       )}
       {active && (
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); updateSettings({ interpreterEnabled: false }); }}
-          title="Désactiver l'interprète vocal"
-          style={{
-            background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)',
-            font: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', lineHeight: 1,
-          }}
-        >
-          ×
-        </button>
+        <>
+          {/* Quick-access voice + speed picker, right next to the lang
+              select, so the user never has to jump into Settings just
+              to swap a voice mid-session. */}
+          <VoiceQuickPopover />
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); updateSettings({ interpreterEnabled: false }); }}
+            title="Désactiver l'interprète vocal"
+            style={{
+              background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)',
+              font: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </>
       )}
     </label>
   );
@@ -549,15 +557,3 @@ function useWaveform(level: number, active: boolean): number[] {
   return bars;
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const s = String(reader.result || '');
-      const comma = s.indexOf(',');
-      resolve(comma >= 0 ? s.slice(comma + 1) : s);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}

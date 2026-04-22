@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ListenerSegment } from '../../shared/types';
+import { blobToBase64 } from '../lib/blob';
 
 export interface UseListenerOptions {
   /** Target language (ISO). Empty = no translation. */
@@ -233,7 +234,10 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
   return { start, stop, isActive, level, segments, clearSegments };
 }
 
-async function blobToBase64(blob: Blob): Promise<string> {
+// Local variant retained for symmetry with the old API — new callers
+// should import `blobToBase64` from '../lib/blob' instead. Kept private
+// to avoid breaking any out-of-tree import during the migration.
+async function blobToBase64Local(blob: Blob): Promise<string> {
   const ab = await blob.arrayBuffer();
   const bytes = new Uint8Array(ab);
   let bin = '';

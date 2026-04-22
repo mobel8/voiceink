@@ -10,17 +10,21 @@
 //        - RMS < silenceEnd threshold for `silenceHoldMs` consecutive
 //          ms → stop the MediaRecorder, ship the WebM blob off to the
 //          `interpret` IPC, then get ready for the next phrase.
-//   3. Each phrase feeds its own `InterpretPlayer`, and we maintain a
-//      FIFO queue of players so the OUTPUT audio plays in the order
-//      the user spoke, even when longer phrases take longer to
-//      translate.
+//   3. Each phrase feeds its own `InterpretPlayer`, but we serialize
+//      playback through a strict FIFO queue: only ONE player speaks
+//      at a time. Player N+1 buffers its MP3 chunks in its own
+//      MediaSource (so translation keeps happening in parallel) but
+//      waits for player N to emit `ended` before it gets `.start()`ed.
+//      This is what the user hears as "consecutive translation":
+//      phrase A → pause → phrase B → pause → phrase C, never overlapping.
 //
 // The thresholds are deliberately conservative — we'd rather keep a
 // tiny bit of silence at the ends than clip the beginning of a word.
 // Users can later tune them from SettingsView if needed.
 
 import { useCallback, useEffect, useRef } from 'react';
-import { InterpretPlayer } from '../lib/interpret-player';
+import { InterpretPlayer, InterpretPlayerQueue } from '../lib/interpret-player';
+import { blobToBase64 } from '../lib/blob';
 import type { InterpretChunkEvent, InterpretResponse } from '../../shared/types';
 
 export interface ContinuousInterpreterOptions {
@@ -73,33 +77,31 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const activeRef = useRef<boolean>(false);
   const stoppingForShipRef = useRef<boolean>(false);
 
-  /** FIFO of players we're currently playing (in speaking order). */
-  const playerQueueRef = useRef<InterpretPlayer[]>([]);
-  const unsubChunkRef = useRef<null | (() => void)>(null);
-
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  // Wire the single chunk listener. Each chunk's requestId routes to
-  // its own player — we hold the map in playerQueueRef and dispatch
-  // by requestId match.
+  /**
+   * Strict-FIFO queue of players. See `InterpretPlayerQueue` for the
+   * serialization guarantee — only one player speaks at a time, the
+   * rest buffer silently until their turn.
+   *
+   * Constructed lazily on first render so `optsRef` is already set by
+   * the time the queue's error hook reads it.
+   */
+  const queueRef = useRef<InterpretPlayerQueue | null>(null);
+  if (!queueRef.current) {
+    queueRef.current = new InterpretPlayerQueue((err) => optsRef.current.onError?.(err));
+  }
+
+  // Wire a single chunk listener that routes to the queue; the queue
+  // forwards each chunk to its matching player by requestId.
   useEffect(() => {
     const api = (window as any).voiceink;
     if (!api?.onInterpretChunk) return;
     const unsub = api.onInterpretChunk((evt: InterpretChunkEvent) => {
-      // Route to the matching player. Slow lookup but the queue is
-      // short (usually < 3 active players).
-      for (const p of playerQueueRef.current) {
-        // InterpretPlayer ignores chunks for other requestIds, so
-        // we can push to every player — but better to route explicitly.
-        p.push(evt);
-      }
+      queueRef.current?.route(evt);
     });
-    unsubChunkRef.current = unsub;
-    return () => {
-      try { unsub?.(); } catch { /* ignore */ }
-      unsubChunkRef.current = null;
-    };
+    return () => { try { unsub?.(); } catch { /* ignore */ } };
   }, []);
 
   const shipCurrentPhrase = useCallback((reason: 'silence' | 'cap' | 'force') => {
@@ -119,15 +121,18 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
 
   const shipBlob = useCallback(async (blob: Blob, mimeType: string) => {
     const requestId = `intc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const queue = queueRef.current!;
+    // Build the player in "held" mode — it will buffer MP3 chunks
+    // but stay silent until the queue authorizes playback. This is
+    // what prevents phrase N+1 from talking over phrase N.
     const player = new InterpretPlayer(requestId, {
-      onEnd: () => {
-        // Remove from queue when playback ends.
-        const i = playerQueueRef.current.indexOf(player);
-        if (i >= 0) playerQueueRef.current.splice(i, 1);
+      onEnd: () => queue.advance(player),
+      onError: (err) => {
+        optsRef.current.onError?.(err);
+        queue.advance(player);
       },
-      onError: (err) => optsRef.current.onError?.(err),
-    }, { sinkId: optsRef.current.sinkId?.() });
-    playerQueueRef.current.push(player);
+    }, { sinkId: optsRef.current.sinkId?.(), autoStart: false });
+    queue.add(player);
     optsRef.current.onPhraseStart?.({ requestId });
     try {
       const audioBase64 = await blobToBase64(blob);
@@ -141,15 +146,16 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       });
       optsRef.current.onPhraseDone?.(res);
       if (!res.ok) {
-        // Surface error, tear down this player.
+        // Surface error, tear down this player and advance the queue
+        // so the next phrase doesn't stall behind a broken one.
         optsRef.current.onError?.(new Error(res.error || 'Interpret failed'));
         player.dispose();
-        const i = playerQueueRef.current.indexOf(player);
-        if (i >= 0) playerQueueRef.current.splice(i, 1);
+        queue.advance(player);
       }
     } catch (err: any) {
       optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
       player.dispose();
+      queue.advance(player);
     }
   }, []);
 
@@ -280,17 +286,4 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const isActive = useCallback(() => activeRef.current, []);
 
   return { start, stop, isActive };
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const s = String(reader.result || '');
-      const comma = s.indexOf(',');
-      resolve(comma >= 0 ? s.slice(comma + 1) : s);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
 }
