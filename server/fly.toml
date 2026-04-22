@@ -1,0 +1,39 @@
+# Fly.io deployment config for the VoiceInk backend.
+# Usage:
+#   fly launch --no-deploy           # once, to create the app
+#   fly secrets set DATABASE_URL=... # plus every var from .env.example
+#   fly deploy                       # rebuild + push
+
+app = "voiceink-api"
+primary_region = "cdg"  # Paris — low RTT to Groq EU edges
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    # Fastify can happily handle hundreds of concurrent requests per core.
+    # We cap here so autoscaling kicks in before we saturate.
+    soft_limit = 120
+    hard_limit = 240
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[[services.checks]]
+  name = "health"
+  type = "http"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "15s"
+  method = "get"
+  path = "/health"
