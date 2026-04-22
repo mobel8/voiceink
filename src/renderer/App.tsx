@@ -7,6 +7,7 @@ import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
 import { StatusBar } from './components/StatusBar';
 import { CompactView } from './components/CompactView';
+import { UpdateBanner } from './components/UpdateBanner';
 import { applyTheme } from './lib/theme';
 import { getTheme, DEFAULT_EFFECTS } from '../shared/themes';
 
@@ -105,6 +106,10 @@ export default function App() {
         </div>
         <StatusBar />
       </div>
+      {/* Auto-updater toast. Owns its own subscription + visibility —
+          renders nothing in `idle` phase, floats bottom-right when
+          there's state to show. Never blocks the UI. */}
+      <UpdateBanner />
     </div>
   );
 }

@@ -145,6 +145,17 @@ const en: Dict = {
   'history.clear':        'Clear history',
   'history.pin':          'Pin',
   'history.unpin':        'Unpin',
+
+  // Auto-updater
+  'updater.checking':      'Checking for updates…',
+  'updater.upToDate':      'VoiceInk {version} is up to date.',
+  'updater.downloading':   'Downloading VoiceInk {version}…',
+  'updater.readyTitle':    'VoiceInk {version} is ready to install',
+  'updater.readyDesc':     'Restart to apply the update — your work will be saved.',
+  'updater.installNow':    'Install & restart',
+  'updater.later':         'Later',
+  'updater.errorTitle':    'Update check failed',
+  'updater.errorGeneric':  'Network issue — we\u2019ll try again later.',
 };
 
 const fr: Dict = {
@@ -242,6 +253,17 @@ const fr: Dict = {
   'history.clear':        'Vider l\u2019historique',
   'history.pin':          'Épingler',
   'history.unpin':        'Désépingler',
+
+  // Mise à jour automatique
+  'updater.checking':      'Recherche de mises à jour…',
+  'updater.upToDate':      'VoiceInk {version} est à jour.',
+  'updater.downloading':   'Téléchargement de VoiceInk {version}…',
+  'updater.readyTitle':    'VoiceInk {version} est prêt à être installé',
+  'updater.readyDesc':     'Redémarrez pour appliquer la mise à jour — votre travail sera sauvegardé.',
+  'updater.installNow':    'Installer et redémarrer',
+  'updater.later':         'Plus tard',
+  'updater.errorTitle':    'Échec de la vérification',
+  'updater.errorGeneric':  'Problème réseau — nous réessaierons plus tard.',
 };
 
 const translations: Record<Exclude<UILanguage, 'auto'>, Dict> = { en, fr };

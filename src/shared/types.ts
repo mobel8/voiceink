@@ -499,4 +499,40 @@ export const IPC = {
   ON_PTT_DOWN: 'voiceink:onPttDown',
   ON_PTT_UP: 'voiceink:onPttUp',
   LOG: 'voiceink:log',
+  /* ─── Auto-updater (see src/main/updater.ts) ─────────────────── */
+  /** Renderer → main : check for updates manually (button in Settings). */
+  UPDATER_CHECK: 'voiceink:updaterCheck',
+  /** Renderer → main : accept & install a downloaded update (quit & install). */
+  UPDATER_INSTALL: 'voiceink:updaterInstall',
+  /** Renderer → main : poll current updater state (after app reload). */
+  UPDATER_GET_STATE: 'voiceink:updaterGetState',
+  /** Main → renderer : state transitions (idle / checking / available / downloading / ready / error). */
+  ON_UPDATER_STATE: 'voiceink:onUpdaterState',
 } as const;
+
+/**
+ * Auto-updater state machine. Emitted by `src/main/updater.ts` via
+ * `ON_UPDATER_STATE`. The renderer displays a banner/toast depending
+ * on `phase` and surfaces the progress bar while `phase === 'downloading'`.
+ *
+ * Phases:
+ * - `idle` : nothing in flight, no update pending
+ * - `checking` : `autoUpdater.checkForUpdates()` in progress
+ * - `up-to-date` : check completed, no newer version on the feed
+ * - `available` : newer version found, download is about to start
+ * - `downloading` : download active — `progress` is populated
+ * - `ready` : download complete, user can click "Install & restart"
+ * - `error` : something went wrong — `error` contains the message
+ */
+export interface UpdaterState {
+  phase: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'error';
+  /** Version string of the available/ready update (e.g. "1.8.0"). */
+  version?: string;
+  /** Download progress 0-100 when `phase === 'downloading'`. */
+  progress?: number;
+  /** Bytes transferred / total, only during download (for optional display). */
+  transferred?: number;
+  total?: number;
+  /** Human-readable error when `phase === 'error'`. */
+  error?: string;
+}

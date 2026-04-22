@@ -20,6 +20,7 @@ import {
 import { injectText, copyToClipboard } from './services/injection';
 import { applyReplacements, wordCount } from './services/replacements';
 import { reRegisterShortcuts } from './shortcuts';
+import { checkForUpdates, installAndRestart, getUpdaterState } from './updater';
 import {
   sanitizeSettingsPatch,
   validateHistoryId,
@@ -608,5 +609,22 @@ export function registerIpc(): void {
       console.error('[listener] error:', err?.message || err);
       return { ok: false, text: '', error: err?.message || String(err) };
     }
+  });
+
+  // -------------------------------------------------------------------
+  // Auto-updater handlers. All three are fire-and-forget from the
+  // renderer's perspective — the actual state machine lives in
+  // src/main/updater.ts and pushes transitions via ON_UPDATER_STATE.
+  // -------------------------------------------------------------------
+  ipcMain.handle(IPC.UPDATER_CHECK, async () => {
+    await checkForUpdates();
+  });
+  ipcMain.handle(IPC.UPDATER_INSTALL, () => {
+    // Fires app.quit() → app.relaunch() internally. No return value
+    // meaningful; by the time the renderer would read it, we're gone.
+    installAndRestart();
+  });
+  ipcMain.handle(IPC.UPDATER_GET_STATE, () => {
+    return getUpdaterState();
   });
 }

@@ -11,6 +11,7 @@ import {
   unregisterOwnWindow,
 } from './services/focus';
 import { getSettings, setSettings } from './services/config';
+import { initUpdater } from './updater';
 
 // Force the app name BEFORE any userData-dependent API runs. Without this,
 // running the dev binary (node_modules/.bin/electron) uses the generic
@@ -645,6 +646,10 @@ app.whenReady().then(async () => {
   await createWindow();
   try { createTray(getWin); } catch (e) { console.warn('[tray]', e); }
   try { registerShortcuts(getWin); } catch (e) { console.warn('[shortcuts]', e); }
+  // Auto-updater : silent background check 15s after boot, then every 4h.
+  // No-op in dev (see src/main/updater.ts). In packaged builds it reads
+  // `app-update.yml` embedded by electron-builder and polls GitHub Releases.
+  try { initUpdater(); } catch (e) { console.warn('[updater]', e); }
   // Note: 'second-instance' handler is registered earlier in this
   // file (at module import time) so it's live before whenReady
   // resolves — see the block right after requestSingleInstanceLock.

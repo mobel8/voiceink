@@ -55,6 +55,10 @@ const IPC = {
   ON_PTT_DOWN: 'voiceink:onPttDown',
   ON_PTT_UP: 'voiceink:onPttUp',
   LOG: 'voiceink:log',
+  UPDATER_CHECK: 'voiceink:updaterCheck',
+  UPDATER_INSTALL: 'voiceink:updaterInstall',
+  UPDATER_GET_STATE: 'voiceink:updaterGetState',
+  ON_UPDATER_STATE: 'voiceink:onUpdaterState',
 } as const;
 
 const api = {
@@ -177,6 +181,22 @@ const api = {
     const listener = () => cb();
     ipcRenderer.on('voiceink:densitySwapOut', listener);
     return () => ipcRenderer.removeListener('voiceink:densitySwapOut', listener);
+  },
+
+  /**
+   * Auto-updater API. See `src/main/updater.ts` for the state machine.
+   * - `updaterCheck()` : fire a manual check (user clicked "Check for updates")
+   * - `updaterInstall()` : quit & install a downloaded update
+   * - `updaterGetState()` : hydrate the UI on mount (returns current phase)
+   * - `onUpdaterState(cb)` : subscribe to state transitions
+   */
+  updaterCheck: (): Promise<void> => ipcRenderer.invoke(IPC.UPDATER_CHECK),
+  updaterInstall: (): Promise<void> => ipcRenderer.invoke(IPC.UPDATER_INSTALL),
+  updaterGetState: (): Promise<unknown> => ipcRenderer.invoke(IPC.UPDATER_GET_STATE),
+  onUpdaterState: (cb: (state: unknown) => void) => {
+    const listener = (_e: unknown, s: unknown) => cb(s);
+    ipcRenderer.on(IPC.ON_UPDATER_STATE, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_UPDATER_STATE, listener);
   },
 };
 
