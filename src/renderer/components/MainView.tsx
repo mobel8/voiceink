@@ -167,6 +167,10 @@ export function MainView() {
         setLastError('');
         setLastTranscript('');
         setRecState('recording');
+        // Fire TLS warm-up for Groq + TTS the moment recording begins —
+        // by the time the user stops speaking (2-30 s later) the HTTPS
+        // sockets are hot, shaving ~50-80 ms off Whisper + translate + TTS.
+        try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
         try {
           await continuous.start();
         } catch (err: any) {
@@ -184,6 +188,9 @@ export function MainView() {
       setLastError('');
       setLastTranscript('');
       setRecState('recording');
+      // Same trick as the continuous branch above: warm the HTTPS
+      // sockets while the user is still speaking.
+      try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
       await recorder.start();
     }
   };

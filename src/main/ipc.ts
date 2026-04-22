@@ -4,9 +4,10 @@ import { writeFile } from 'fs/promises';
 import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings, VoiceInfo, TTSProvider } from '../shared/types';
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
-import { postProcess, translateText } from './engines/llm';
+import { postProcess, translateText, streamTranslate, prewarmGroq } from './engines/llm';
 import { streamTTS } from './engines/tts';
 import { listVoices } from './engines/tts/catalog';
+import { prewarmCartesia } from './engines/tts/cartesia';
 import {
   listHistory,
   addHistory,
@@ -229,6 +230,16 @@ export function registerIpc(): void {
         throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
       }
 
+      // Fire-and-forget TLS warm-up for every origin we're about to
+      // hit. Each of these 2 calls opens a TLS session that undici's
+      // global agent keeps pooled for ~60 s. When we then POST to the
+      // real endpoints, no TCP + TLS handshake → ~40-100 ms saved per
+      // host, compounded over Whisper + translate + TTS.
+      prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+      if (settings.ttsProvider === 'cartesia') {
+        prewarmCartesia(settings.ttsApiKey?.cartesia || '');
+      }
+
       // 1) Whisper transcription in the SOURCE language.
       const t1 = Date.now();
       const sourceLangHint = req.sourceLang && req.sourceLang !== 'auto' ? req.sourceLang : '';
@@ -247,30 +258,89 @@ export function registerIpc(): void {
         throw new Error('Aucune parole détectée dans l\'audio.');
       }
 
-      // 2) Translation to the target language — reuse the same
-      //    translateText machinery as the classic pipeline.
+      // 2) + 3) Streaming translate *overlapped* with streaming TTS.
+      //
+      // The naive pipeline runs translate to completion (~150-400 ms),
+      // then starts TTS (another ~150-250 ms before the first MP3
+      // byte). Here we kick off two smaller TTS calls back-to-back:
+      // the first one starts the moment the translator emits a full
+      // sentence (end mark `.!?` or end-of-stream), the second covers
+      // whatever arrives afterwards. For short utterances (one
+      // sentence, the common case) the second branch is a no-op.
+      //
+      // Net win: the user starts hearing the translation ~100-250 ms
+      // earlier, because the TTS handshake (TCP + TLS + server warm-up)
+      // overlaps with the final tokens of the translator instead of
+      // happening after them.
       const t2 = Date.now();
-      const translated = await translateText(rawText, req.targetLang, settings, r.language);
-      console.log(`[interpret] translate → ${req.targetLang}: ${Date.now() - t2}ms`);
-
-      // 3) TTS streaming — forward every MP3 chunk to the renderer as
-      //    soon as it arrives. The `ttfbMs` metric is measured at the
-      //    first chunk so the UI can display the perceived latency.
-      const t3 = Date.now();
-      const ttsIter = streamTTS(settings, translated, { language: req.targetLang });
-      for await (const { chunk, mime } of ttsIter) {
-        if (ttfbMs === undefined) {
-          ttfbMs = Date.now() - t3;
-          console.log(`[interpret] tts first chunk: ${ttfbMs}ms`);
+      const dispatchTTS = async (partial: string): Promise<void> => {
+        for await (const { chunk, mime } of streamTTS(settings, partial, { language: req.targetLang })) {
+          if (ttfbMs === undefined) {
+            ttfbMs = Date.now() - t2;
+            console.log(`[interpret] first audio chunk after ${ttfbMs}ms from translate start`);
+          }
+          send({
+            requestId: req.requestId,
+            seq: seq++,
+            chunkBase64: chunk.toString('base64'),
+            mime,
+            done: false,
+          });
         }
-        send({
-          requestId: req.requestId,
-          seq: seq++,
-          chunkBase64: chunk.toString('base64'),
-          mime,
-          done: false,
-        });
+      };
+
+      let translatedFull = '';
+      let pending = '';
+      // Queue of in-flight TTS tasks so we can await them IN ORDER
+      // before emitting the final done-sentinel. We never kick off
+      // more than one TTS at a time — sequential playback is the
+      // desired UX (otherwise the user hears two voices overlap).
+      let ttsQueue: Promise<void> = Promise.resolve();
+      let firstSentenceSent = false;
+
+      for await (const delta of streamTranslate(rawText, req.targetLang, settings, r.language)) {
+        translatedFull += delta;
+        pending += delta;
+        // Scan the pending buffer for a natural sentence boundary.
+        // We look for the LAST terminal mark so a single multi-sentence
+        // delta gets split into two TTS calls if the model emits it in
+        // one shot (rare but possible on 8B).
+        const match = pending.match(/^([\s\S]*[.!?…])(\s+|$)/);
+        if (match && !firstSentenceSent) {
+          const firstChunk = match[1].trim();
+          pending = pending.slice(match[0].length);
+          if (firstChunk.length >= 2) {
+            firstSentenceSent = true;
+            const toSpeak = firstChunk;
+            ttsQueue = ttsQueue.then(() => dispatchTTS(toSpeak));
+          }
+        }
       }
+      console.log(`[interpret] translate stream done in ${Date.now() - t2}ms → "${translatedFull.slice(0, 80)}"`);
+
+      // Whatever is left in `pending` after the stream closes is the
+      // tail (if we split) or the full translation (if we never hit a
+      // sentence mark — one-word inputs, abbreviations, etc.).
+      const tail = pending.trim();
+      if (tail.length > 0) {
+        ttsQueue = ttsQueue.then(() => dispatchTTS(tail));
+      }
+      // If the stream produced nothing useful, fall back to the one-shot
+      // translate so the user still gets audio. Should be rare.
+      if (!translatedFull.trim()) {
+        console.warn('[interpret] translate stream produced empty output, falling back to one-shot');
+        const oneShot = await translateText(rawText, req.targetLang, settings, r.language);
+        if (oneShot.trim()) {
+          translatedFull = oneShot;
+          ttsQueue = ttsQueue.then(() => dispatchTTS(oneShot));
+        }
+      }
+
+      // Drain every TTS call we kicked off before signalling completion.
+      await ttsQueue;
+
+      const translated = translatedFull.trim();
+
       // Flush sentinel so the renderer can close its MediaSource buffer.
       send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
 
@@ -320,6 +390,22 @@ export function registerIpc(): void {
         durationMs: Date.now() - t0,
         error: msg,
       };
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // PREWARM — fire-and-forget TLS session opener. Called by the
+  // renderer the moment the user starts recording so all HTTPS pipes
+  // (Groq + TTS provider) are hot by the time the audio upload begins.
+  // The payload is irrelevant — only the TCP + TLS handshake matters.
+  // Saves 40-80 ms on EACH of Whisper, translate and TTS when the
+  // socket is still in undici's pool.
+  // -------------------------------------------------------------------
+  ipcMain.on(IPC.PREWARM, () => {
+    const settings = getSettings();
+    prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+    if (settings.ttsProvider === 'cartesia') {
+      prewarmCartesia(settings.ttsApiKey?.cartesia || '');
     }
   });
 

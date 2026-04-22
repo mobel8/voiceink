@@ -29,6 +29,7 @@ const IPC = {
   LIST_VOICES: 'voiceink:listVoices',
   LISTENER_TRANSCRIBE: 'voiceink:listenerTranscribe',
   SPEAK: 'voiceink:speak',
+  PREWARM: 'voiceink:prewarm',
   GET_SETTINGS: 'voiceink:getSettings',
   SET_SETTINGS: 'voiceink:setSettings',
   GET_HISTORY: 'voiceink:getHistory',
@@ -91,6 +92,11 @@ const api = {
   /** Text-to-speech only — streams MP3 chunks via onInterpretChunk. */
   speak: (req: { requestId: string; text: string; language?: string }): Promise<{ ok: boolean; ttfbMs?: number; error?: string; requestId: string }> =>
     ipcRenderer.invoke(IPC.SPEAK, req),
+
+  /** Fire-and-forget TLS warm-up for Groq + TTS origin. Call this the
+   *  moment the user starts recording so sockets are hot by the time
+   *  the audio is ready to upload. */
+  prewarm: () => ipcRenderer.send(IPC.PREWARM),
 
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IPC.GET_HISTORY),
   deleteHistory: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DELETE_HISTORY, id),

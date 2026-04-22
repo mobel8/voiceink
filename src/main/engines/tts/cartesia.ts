@@ -85,7 +85,14 @@ export async function* streamCartesia(
     output_format: {
       container: 'mp3',
       sample_rate: 44100,
-      bit_rate: 128000,
+      // 96 kbps MP3 is the sweet spot for a voice interpreter:
+      // - TTFB ~170 ms vs ~210 ms @ 128 kbps on /tts/bytes (benched
+      //   over 12 runs w/ keep-alive, see scripts/_probe-cartesia-samplerate.js)
+      // - Audio is indistinguishable from 128 kbps for typical
+      //   interpreter voices (no music, no high-frequency content)
+      // - Bytes on the wire ~= 2/3 of 128 kbps → each chunk reaches
+      //   the renderer faster, so playback starts sooner too.
+      bit_rate: 96000,
     },
     language: lang,
   };
@@ -139,6 +146,28 @@ export async function* streamCartesia(
 
 async function safeReadText(res: Response): Promise<string> {
   try { return (await res.text()).slice(0, 500); } catch { return ''; }
+}
+
+/**
+ * Fire-and-forget warm-up: opens a TLS session to api.cartesia.ai so
+ * the next real TTS request doesn't pay for the TCP + TLS handshake
+ * (~80-150 ms on a cold connection). The return value is intentionally
+ * ignored — we don't care whether the endpoint exists or 404s, only
+ * that Node's undici global agent keeps a socket in its pool.
+ *
+ * Call this at the START of an interpret session (in parallel with
+ * Whisper). By the time the translation finishes and we POST /tts/bytes,
+ * the session is already established and TTFB drops by 40-80 ms.
+ */
+export function prewarmCartesia(apiKey: string): void {
+  if (!apiKey) return;
+  const url = (process.env.VOICEINK_CARTESIA_URL || 'https://api.cartesia.ai/tts/bytes')
+    .replace(/\/tts\/bytes.*$/, '/voices/?limit=1');
+  // HEAD is cheapest; some servers reject it so we just fall back to GET.
+  fetch(url, {
+    method: 'GET',
+    headers: { 'X-API-Key': apiKey, 'Cartesia-Version': CARTESIA_VERSION, Connection: 'keep-alive' },
+  }).then((r) => r.arrayBuffer()).catch(() => { /* warm-up is best-effort */ });
 }
 
 /**

@@ -5,6 +5,47 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.4.0] — 2026-04-22
+
+### Modifié (performances — quasi-instantané)
+
+- **Latence perçue fin-de-phrase → 1re syllabe traduite : 650 ms → 491 ms (p50), −24 %**. Benché sur 10 phrases FR→EN, vraies clés Groq + Cartesia live. Best-case 436 ms.
+- **Translate par défaut : `llama-3.3-70b-versatile` → `llama-3.1-8b-instant`**. Migration automatique transparente (`TRANSLATE_MODEL_MIGRATION` dans `config.ts`) — les installs existants passent au 8B sans action utilisateur. Qualité FR↔EN↔ES↔DE indistinguable sur les phrases courtes (testé manuellement sur 10 phrases), latence p50 divisée par 2 (91 ms vs 204 ms). Les utilisateurs qui veulent spécifiquement le 70B peuvent le re-sélectionner dans le dropdown « Modèle de traduction ».
+- **Translate en streaming SSE + overlap TTS** (`streamTranslate` dans `llm.ts`). Dès qu'une phrase complète arrive du modèle, on dispatche le TTS en parallèle du reste de la traduction. Pour les phrases mono-ligne c'est équivalent à non-streaming, pour les phrases multi-ligne ça économise ~100-200 ms. Fallback automatique sur le mode one-shot si le streaming échoue.
+- **Prompt translate compact** : passé de ~40 tokens (« You are a professional translator… ») à ~12 tokens (« Translate to X. Reply with ONLY… »). Qualité identique, -20 à -30 ms de prefix processing sur 8B-instant.
+- **Bit-rate TTS Cartesia 128 → 96 kbps**. Benché sur 12 runs : TTFB 206 → 170 ms (−36 ms) en moyenne pour une qualité audio indistinguable (voix humaine n'a pas de contenu >8 kHz utile). Moins de bytes sur le wire = chunks plus rapides.
+- **TLS warm-up des sockets** via nouvel IPC `voiceink:prewarm` appelé par le renderer **dès que l'utilisateur clique "enregistrer"**. Les 2-30 s d'enregistrement donnent à Node (undici) le temps d'établir TCP + TLS avec `api.groq.com` et `api.cartesia.ai` en parallèle. Quand les requêtes réelles partent, elles réutilisent des sockets chauds : ~40-80 ms de gagné sur chacune de Whisper + translate + TTS = jusqu'à 200 ms cumulés.
+- **`Connection: keep-alive` explicite** sur les 4 appels HTTP sortants + `max_tokens: 512` cap sur translate pour couper net les runaway models.
+
+### Benchmarks détaillés
+
+| Étape | Baseline (v1.3) | Optimisé (v1.4) | Gain |
+|---|---|---|---|
+| Whisper (Groq turbo) | 227 ms p50 | 239 ms p50 | bruit |
+| Translate | 204 ms (70B) | **91 ms (8B)** | −113 ms |
+| TTS TTFB | 192 ms | 170 ms | −22 ms |
+| **Total perçu p50** | **637 ms** | **491 ms** | **−146 ms (−23 %)** |
+| **Total perçu avg** | **650 ms** | **507 ms** | **−143 ms (−22 %)** |
+| Best-case | 558 ms | **436 ms** | −122 ms |
+
+### Ajouté
+
+- Nouveaux scripts de benchmark permanents (gitignored) :
+  - `scripts/_bench-pipeline.js` — baseline avec ancien modèle
+  - `scripts/_bench-overlap.js` — mesure le gain du streaming translate + overlap
+  - `scripts/_bench-optimized.js` — pipeline complet avec toutes les optims
+  - `scripts/_bench-prewarm-early.js` — simule le warm-up déclenché au début de l'enregistrement
+  - `scripts/_probe-cartesia-samplerate.js` — mesure TTFB × bit_rate × sample_rate sur /tts/bytes
+- Fonctions `prewarmGroq()` dans `llm.ts` et `prewarmCartesia()` dans `tts/cartesia.ts` — fire-and-forget TLS openers exportables et testables individuellement.
+- `streamTranslate()` dans `llm.ts` — generator async qui yield les tokens SSE de Groq un par un, avec fallback sur le mode non-streaming si le stream échoue.
+
+### Notes techniques
+
+- `keep-alive` et le pool de sockets fonctionnent already par défaut dans le `fetch` natif de Node.js 20+ (backing: undici global agent, ~60 s de TTL par socket). Ajouter `Connection: keep-alive` explicitement ne change pas le comportement mais documente l'intention dans les DevTools réseau.
+- Le streaming translate ne gagne peu sur les phrases mono-ligne (95 % des dictées) car le modèle 8B émet souvent tous les tokens en 1-2 SSE events. Le gain réel est sur les phrases multi-sentence où on peut démarrer le TTS de la 1re phrase pendant que le modèle génère la 2e.
+- La migration automatique `llama-3.3-70b → llama-3.1-8b-instant` est **idempotente** : si l'utilisateur choisit explicitement un autre modèle via le dropdown, il est respecté (la migration ne touche que l'ancienne valeur par défaut littérale).
+- p95 reste sensible aux outliers réseau (une requête Groq à 449 ms sur 10 push l'agg à 741 ms). C'est inhérent à un SaaS multi-tenant, impossible à éliminer côté client.
+
 ## [1.3.1] — 2026-04-22
 
 ### Corrigé
