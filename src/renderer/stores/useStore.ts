@@ -55,6 +55,13 @@ interface State {
   settings: Settings;
   loadSettings: () => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
+  /**
+   * Overwrite the entire settings slice with a value pushed by main
+   * (global-accelerator flip, ON_SETTINGS_CHANGED broadcast, etc.).
+   * Preserves the URL-hash density so a live settings push from
+   * another window never re-paints this one with the wrong layout.
+   */
+  setSettingsFromBroadcast: (next: Settings) => void;
 
   history: HistoryEntry[];
   loadHistory: () => Promise<void>;
@@ -99,6 +106,11 @@ export const useStore = create<State>()((set, get) => ({
     const next = await window.voiceink.setSettings(patch);
     // Same contract as loadSettings — never let density flip under
     // a live renderer.
+    set({ settings: { ...next, density: initialDensity() } });
+  },
+  setSettingsFromBroadcast: (next) => {
+    // Trust main's payload but keep the density locked to this
+    // window's URL hash — see loadSettings() comment for why.
     set({ settings: { ...next, density: initialDensity() } });
   },
 

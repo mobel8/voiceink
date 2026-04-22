@@ -41,6 +41,7 @@ const IPC = {
   EXPORT: 'voiceink:export',
   ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
   ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
+  ON_SETTINGS_CHANGED: 'voiceink:onSettingsChanged',
   WINDOW_MINIMIZE: 'voiceink:windowMinimize',
   WINDOW_CLOSE: 'voiceink:windowClose',
   WINDOW_MAXIMIZE: 'voiceink:windowMaximize',
@@ -141,6 +142,18 @@ const api = {
     const listener = () => cb();
     ipcRenderer.on('voiceink:openSettings', listener);
     return () => ipcRenderer.removeListener('voiceink:openSettings', listener);
+  },
+
+  /**
+   * Subscribe to settings changes broadcast by main after any UI
+   * round-trip OR any global-accelerator flip (e.g. the interpreter
+   * hotkey). The callback receives the FULL new Settings so the
+   * renderer can `set({ settings: next })` in one shot, no extra IPC.
+   */
+  onSettingsChanged: (cb: (settings: Settings) => void) => {
+    const listener = (_e: unknown, s: Settings) => cb(s);
+    ipcRenderer.on(IPC.ON_SETTINGS_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_SETTINGS_CHANGED, listener);
   },
 
   log: (...args: unknown[]) => ipcRenderer.invoke(IPC.LOG, ...args),

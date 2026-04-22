@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker, Globe } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES } from '../lib/constants';
 import { Settings, TTSProvider } from '../../shared/types';
@@ -8,9 +8,12 @@ import { ReplacementsSection } from './ReplacementsSection';
 import { VoicePicker } from './VoicePicker';
 import { AudioDevicePicker } from './AudioDevicePicker';
 import { SpeedSlider } from './SpeedSlider';
+import { useT } from '../lib/i18n';
+import { SUPPORTED_UI_LANGUAGES, type UILanguage } from '../../shared/i18n';
 
 export function SettingsView() {
   const { settings, updateSettings } = useStore();
+  const t = useT();
   const [showKey, setShowKey] = useState(false);
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [savedPulse, setSavedPulse] = useState(false);
@@ -72,35 +75,53 @@ export function SettingsView() {
       <section id="sec-interface" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
           <Layout size={16} className="accent-text" />
-          <h2 className="font-semibold text-lg">Interface</h2>
+          <h2 className="font-semibold text-lg">{t('settings.section.interface')}</h2>
+        </div>
+
+        {/* App language (i18n) — placed at the TOP of the Interface section
+            so an English-speaking user who accidentally launched in French
+            can find the switch without reading any other French label. */}
+        <div>
+          <div className="label mb-2 flex items-center gap-2">
+            <Globe size={12} className="accent-text" />
+            {t('settings.uiLanguage.label')}
+          </div>
+          <select
+            className="select"
+            value={settings.uiLanguage || 'auto'}
+            onChange={(e) => save({ uiLanguage: e.target.value as UILanguage })}
+          >
+            {SUPPORTED_UI_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.code === 'auto' ? `${l.native} (${l.englishName})` : `${l.native} — ${l.englishName}`}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-white/40 mt-2">{t('settings.uiLanguage.hint')}</p>
         </div>
 
         <div>
-          <div className="label mb-2">Densité</div>
+          <div className="label mb-2">{t('settings.density.label')}</div>
           <div className="seg">
             <button
               className={settings.density === 'comfortable' ? 'active' : ''}
               onClick={() => setDensity('comfortable')}
             >
-              Confortable
+              {t('settings.density.comfortable')}
             </button>
             <button
               className={settings.density === 'compact' ? 'active' : ''}
               onClick={() => setDensity('compact')}
             >
-              Compact / minimaliste
+              {t('settings.density.compact')}
             </button>
           </div>
-          <p className="text-[11px] text-white/40 mt-2">
-            Le mode compact transforme l'app en une petite pilule flottante
-            (176×52 px) transparente, toujours au premier plan et déplaçable
-            partout à l'écran — idéale pour dicter en surimpression.
-          </p>
+          <p className="text-[11px] text-white/40 mt-2">{t('settings.density.hint')}</p>
         </div>
 
         <ToggleRow
-          label="Toujours au premier plan"
-          desc="Garde la fenêtre VoiceInk visible au-dessus de vos autres applications."
+          label={t('settings.alwaysOnTop')}
+          desc={t('settings.alwaysOnTop.desc')}
           icon={<Pin size={14} />}
           value={settings.alwaysOnTop}
           onChange={setAlwaysOnTop}
@@ -272,8 +293,31 @@ export function SettingsView() {
         </div>
         <div>
           <div className="label mb-2">Démarrer / Arrêter (toggle)</div>
-          <input className="input font-mono" value={settings.shortcutToggle} onChange={(e) => save({ shortcutToggle: e.target.value })} />
-          <p className="text-[11px] text-white/40 mt-1">Format Electron, ex: <code>CommandOrControl+Shift+Space</code>. Nécessite un redémarrage de l'app.</p>
+          <ShortcutInput
+            value={settings.shortcutToggle}
+            onCommit={(next) => save({ shortcutToggle: next })}
+            placeholder="CommandOrControl+Shift+Space"
+          />
+          <p className="text-[11px] text-white/40 mt-1">
+            Cliquez dans le champ puis appuyez sur la combinaison souhaitée. S'applique instantanément — plus besoin de redémarrer.
+          </p>
+        </div>
+
+        {/* Voice-translator hotkey — instant flip of interpreterEnabled from anywhere. */}
+        <div className="pt-2 border-t border-white/5">
+          <div className="label mb-2 flex items-center gap-2">
+            <Volume2 size={12} className="text-emerald-300" />
+            Activer / désactiver l'interprète vocal
+          </div>
+          <ShortcutInput
+            value={settings.shortcutInterpreter || ''}
+            onCommit={(next) => save({ shortcutInterpreter: next })}
+            placeholder="CommandOrControl+Shift+I"
+          />
+          <p className="text-[11px] text-white/40 mt-1">
+            Bascule instantanément le traducteur vocal (pastille verte en haut à droite). La prochaine dictée passera
+            par Whisper → traduction → voix IA. Laissez vide pour désactiver le raccourci.
+          </p>
         </div>
 
         <div className="pt-2 border-t border-white/5">
@@ -287,7 +331,11 @@ export function SettingsView() {
           {settings.pttEnabled && (
             <div className="mt-3 slide-up">
               <div className="label mb-2">Raccourci Push-to-Talk</div>
-              <input className="input font-mono" value={settings.shortcutPTT} onChange={(e) => save({ shortcutPTT: e.target.value })} />
+              <ShortcutInput
+                value={settings.shortcutPTT}
+                onCommit={(next) => save({ shortcutPTT: next })}
+                placeholder="CommandOrControl+Shift+V"
+              />
               <p className="text-[11px] text-white/40 mt-1">
                 Le mode Push-to-Talk démarre l'enregistrement à la première pression et le stoppe à la suivante.
                 Les raccourcis globaux Electron ne reçoivent pas les événements de relâchement sous Windows.
@@ -454,6 +502,117 @@ function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   );
 }
 
+/**
+ * Keyboard-capture input that builds a valid Electron accelerator
+ * string from a real keypress. Forces the user through the supported
+ * format (CommandOrControl+Shift+X) instead of free-form typing where
+ * a typo silently unbinds the shortcut.
+ *
+ * Behaviour:
+ *   - Click inside → input enters "recording" mode (placeholder
+ *     becomes "Appuyez sur la combinaison…", focus ring turns
+ *     emerald).
+ *   - Next keypress where at least one modifier is held (Ctrl/
+ *     Cmd/Shift/Alt) captures the accelerator, commits it, and
+ *     exits recording mode.
+ *   - Escape exits recording mode without committing (useful to
+ *     bail out mid-capture).
+ *   - Backspace/Delete with no modifier → clears the binding
+ *     (commits empty string). Lets the user unbind a hotkey
+ *     without guessing what to type.
+ *
+ * The 1:1 mapping from KeyboardEvent to accelerator string mirrors
+ * Electron's format so `globalShortcut.register(value)` in main
+ * accepts the output verbatim. Every platform-agnostic modifier
+ * uses the `CommandOrControl` alias rather than `Control` / `Meta`
+ * so a binding made on Windows still works on macOS.
+ */
+function ShortcutInput({
+  value,
+  onCommit,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  placeholder?: string;
+}) {
+  const [recording, setRecording] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const formatKey = (e: React.KeyboardEvent<HTMLInputElement>): string | null => {
+    // Ignore pure-modifier presses — we wait for an actual key to be
+    // combined with at least one modifier.
+    const mods: string[] = [];
+    if (e.ctrlKey || e.metaKey) mods.push('CommandOrControl');
+    if (e.altKey) mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+
+    const k = e.key;
+    // Reject bare modifier keys ("Control", "Shift", "Alt", "Meta")
+    // and dead keys — we want a real trailing letter/number/Fn.
+    if (['Control', 'Shift', 'Alt', 'Meta', 'OS', 'ContextMenu', 'Dead'].includes(k)) return null;
+
+    // Normalize special keys to the exact names Electron expects.
+    // See https://www.electronjs.org/docs/latest/api/accelerator.
+    const keyMap: Record<string, string> = {
+      ' ': 'Space',
+      Escape: 'Esc',
+      ArrowUp: 'Up',
+      ArrowDown: 'Down',
+      ArrowLeft: 'Left',
+      ArrowRight: 'Right',
+      '+': 'Plus',
+    };
+    let key = keyMap[k] ?? k;
+    // Single-letter printable characters must be uppercased.
+    if (key.length === 1) key = key.toUpperCase();
+
+    // Require at least ONE modifier (prevents lone-letter bindings
+    // that would swallow the key everywhere on the OS).
+    if (mods.length === 0) return null;
+
+    return [...mods, key].join('+');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      setRecording(false);
+      inputRef.current?.blur();
+      return;
+    }
+    if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      onCommit('');
+      setRecording(false);
+      inputRef.current?.blur();
+      return;
+    }
+    const acc = formatKey(e);
+    if (acc) {
+      onCommit(acc);
+      setRecording(false);
+      inputRef.current?.blur();
+    }
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      readOnly
+      className="input font-mono"
+      style={recording ? { borderColor: 'rgba(16,185,129,0.5)', boxShadow: '0 0 0 2px rgba(16,185,129,0.15)' } : undefined}
+      value={recording ? '' : (value || '')}
+      placeholder={recording ? 'Appuyez sur la combinaison… (Échap pour annuler, Retour arrière pour effacer)' : placeholder}
+      onFocus={() => setRecording(true)}
+      onBlur={() => setRecording(false)}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
 
 /**
  * Voice interpreter configuration — provider + per-provider voice
@@ -544,7 +703,7 @@ function InterpreterSection() {
           {/* Provider picker */}
           <div>
             <div className="label mb-2">Moteur de voix</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))' }}>
               {TTS_PROVIDERS.map((p) => {
                 const active = p.id === providerId;
                 return (

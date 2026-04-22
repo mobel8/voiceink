@@ -130,6 +130,8 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     ['translateModel', 256],
     ['shortcutToggle', 128],
     ['shortcutPTT', 128],
+    ['shortcutInterpreter', 128],
+    ['uiLanguage', 8],
     ['themeId', 64],
     ['density', 16],
     ['interpretTargetLang', 16],
@@ -211,6 +213,12 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
   // Enforce the density enum explicitly (several code paths branch on it).
   if (out.density && out.density !== 'compact' && out.density !== 'comfortable') {
     delete out.density;
+  }
+
+  // Enforce the uiLanguage enum — only ship FR/EN for now plus 'auto'.
+  // Any other value (corrupted JSON, forged IPC) falls back to default.
+  if (out.uiLanguage && out.uiLanguage !== 'auto' && out.uiLanguage !== 'fr' && out.uiLanguage !== 'en') {
+    delete out.uiLanguage;
   }
 
   return out;

@@ -5,6 +5,28 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.7.0] — 2026-04-22
+
+### Ajouté
+
+- **Raccourci clavier global pour activer/désactiver l'interprète vocal.** Nouveau champ `shortcutInterpreter` (défaut `CommandOrControl+Shift+I`). Appuyer dessus de n'importe où dans l'OS flippe `interpreterEnabled` — la pastille émeraude en haut à droite s'allume/s'éteint instantanément, la prochaine dictée passe par le pipeline Whisper → traduction → voix IA, sans avoir à ouvrir Paramètres. Le main process persiste le setting + broadcast `ON_SETTINGS_CHANGED` à toutes les fenêtres renderer, qui se resynchronisent sans reload.
+- **Interface proportionnelle (responsive de A à Z).** Toute la hiérarchie typographique suit maintenant la taille de la fenêtre via `font-size: clamp(14px, 14px + 0.35vw, 17px)` sur `<html>`, ce qui propage automatiquement à toutes les classes Tailwind `rem` (text-lg, text-3xl, padding, gap…). Les grilles thèmes / TTS providers / toggle chips passent en `grid-template-columns: repeat(auto-fit, minmax(Xrem, 1fr))` — le nombre de colonnes s'adapte en continu au lieu de snapper entre breakpoints md/lg. La SettingsView utilise une nouvelle utility `.page-container` avec `max-width: min(68rem, 96vw)` + paddings en `clamp()` — le contenu respire sur écran ultra-large mais reste lisible à 580 px. Le header MainView passe en `flex-wrap` avec paddings fluides — les pickers basculent sous le titre plutôt que d'overflow si la fenêtre est étroite.
+- **Langue de l'interface de l'app configurable (i18n).** Nouveau champ `uiLanguage` (`'auto' | 'fr' | 'en'`, défaut `'auto'`). Dictionnaires FR + EN bundlés dans `@d:\voiceink\src\shared\i18n.ts` (~60 clés à ce stade — nav, settings, actions principales), hook React `useT()` dans `@d:\voiceink\src\renderer\lib\i18n.ts`, sélecteur de langue UI placé en tête de la section Interface de Paramètres (avec icône Globe pour qu'un utilisateur anglophone tombé sur un build FR puisse le trouver sans lire aucun label français). Résolution `auto` → détection via `navigator.language` puis fallback à `'en'`. Ajouter une langue = ajouter un dictionnaire frère + une entrée dans `SUPPORTED_UI_LANGUAGES`, zéro autre changement de code.
+- **Script `npm run smoke:loop`.** Boucle automatisée qui lance l'Electron packagé 1+ fois sur chaque vue (main / history / settings), capte stdout+stderr+`[renderer …]` forwardés, et classifie chaque ligne selon des regex `FATAL_PATTERNS` (`ReferenceError`, `Uncaught TypeError`, `SyntaxError`, unhandled rejection, crash Electron) et `WARNING_PATTERNS` (violations CSP, DevTools warnings, registration refused, loadRenderer failed). Rapport agrégé à la fin. Exit 0 = clean, 1 = fatal, 2 = early exit. Usage : `node scripts/loop-smoke.js [passes] [ms-per-view]`. Passe 6/6 sur ce build.
+
+### Modifié
+
+- **`SET_SETTINGS` IPC** re-enregistre les accélérateurs globaux si `shortcutToggle`, `shortcutPTT`, `shortcutInterpreter` ou `pttEnabled` ont changé → aucune restart de l'app nécessaire pour appliquer un nouveau binding. Broadcast également la nouvelle Settings à toutes les autres fenêtres via `ON_SETTINGS_CHANGED` pour que la synchronisation inter-fenêtres soit immédiate.
+- **`ShortcutInput` capture-clavier** remplace les inputs text libre pour les 3 hotkeys. L'utilisateur ne peut plus saisir un typo silencieux qui casse le binding — il appuie littéralement sur sa combo et VoiceInk la convertit en accelerator Electron (format `CommandOrControl+Shift+X`). Échap annule, Backspace efface. Interactions testées : lettre+modif / touche spéciale / combo sans modif (rejetée pour prévenir les lone-letter bindings qui mangeraient la touche au niveau OS).
+- **`killExisting()` dans les scripts de smoke** nuke maintenant `VoiceInk.exe` (app packagée) en plus de `electron.exe`, avec un délai 1500 ms avant de respawn pour laisser Windows libérer le single-instance lock.
+
+### Notes techniques
+
+- **i18n sans dépendance externe.** Pas de `i18next` / `react-intl` — notre volumétrie de ~150 strings ne justifie pas un runtime de 40 KB + un plugin loader. Le hand-rolled fait < 60 lignes de code total (shared + renderer) et ajoute < 2 KB au bundle. Interpolation `{var}` simple, fallback en chaîne `target → en → fr → key` pour qu'un key manquant soit toujours visible et corrigeable au lieu de rendre une string vide.
+- **Bundle renderer** : 323 KB → 333 KB (+10 KB pour dico FR/EN + hook + refactors responsive). gzip : 101 KB → 105 KB.
+- **Le `root font-size` en `clamp()`** propage l'échelle via toutes les utilités Tailwind en `rem`. Cela évite d'avoir à remplacer `text-3xl` par `text-[clamp(...)]` dans chaque composant — une seule règle CSS orchestre toute la typographie.
+- **Re-register des accélérateurs** coûte ~1 ms (unregister + re-register des 2-3 touches). Le user ne perçoit aucun lag au changement de hotkey.
+
 ## [1.6.0] — 2026-04-22
 
 ### Ajouté

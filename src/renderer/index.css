@@ -59,6 +59,46 @@ html, body, #root { height: 100%; margin: 0; }
 html { color-scheme: dark; }
 
 /* =========================================================
+   Fluid responsive scale — proportional UI at any size.
+   -----------------------------------------------------------
+   The comfortable window can be dragged anywhere from ~560 px
+   (cramped sidebar-off layout) up to the full desktop width.
+   Instead of fixed Tailwind sizes (text-3xl = 30 px regardless
+   of window width), we expose a root <html> font-size that
+   scales with the viewport via clamp(). Tailwind's rem-based
+   utilities (text-lg → 1.125rem → 18 px @ 16 px root) then
+   naturally follow.
+
+   Formula: clamp(14 px, 14 px + 0.4vw, 17 px) — grows about 1px
+   per 250 px of width, capped. Tight enough that nothing looks
+   grotesquely big at 2000 px, loose enough that the 580 px
+   narrow-window case still reads comfortably.
+
+   Compact density (the 176×52 pill) keeps a locked 13 px root
+   so the pill chrome never reflows — it was pixel-tuned.
+   ========================================================= */
+html {
+  font-size: clamp(14px, calc(14px + 0.35vw), 17px);
+}
+html[data-density="compact"] {
+  font-size: 13px;
+}
+/* Page wrapper — maximal utile width + fluid side padding.
+   Used by SettingsView + any other scrolling panel that needs
+   a centered content column. Replaces the legacy max-w-3xl +
+   px-8 combo so the content breathes on ultra-wide screens
+   but still has enough margin on narrow ones. */
+.page-container {
+  max-width: min(68rem, 96vw);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(1rem, 3vw, 2.5rem);
+  padding-right: clamp(1rem, 3vw, 2.5rem);
+  padding-top: clamp(1.25rem, 2.5vw, 2.25rem);
+  padding-bottom: clamp(1.25rem, 2.5vw, 2.25rem);
+}
+
+/* =========================================================
    Density swap — fade-in / fade-out choreography.
    -----------------------------------------------------------
    Electron cannot toggle `transparent: true` at runtime, so

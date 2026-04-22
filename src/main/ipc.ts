@@ -19,6 +19,7 @@ import {
 } from './services/history';
 import { injectText, copyToClipboard } from './services/injection';
 import { applyReplacements, wordCount } from './services/replacements';
+import { reRegisterShortcuts } from './shortcuts';
 import {
   sanitizeSettingsPatch,
   validateHistoryId,
@@ -44,7 +45,32 @@ const LANG_HINTS: { interpret?: string; listener?: string } = {};
 
 export function registerIpc(): void {
   ipcMain.handle(IPC.GET_SETTINGS, (): Settings => getSettings());
-  ipcMain.handle(IPC.SET_SETTINGS, (_e, patch: unknown) => setSettings(sanitizeSettingsPatch(patch)));
+  ipcMain.handle(IPC.SET_SETTINGS, (_e, patch: unknown) => {
+    const sanitized = sanitizeSettingsPatch(patch);
+    const before = getSettings();
+    const next = setSettings(sanitized);
+    // Re-register global accelerators if any shortcut-related field
+    // changed. Without this the user has to restart the app for a new
+    // hotkey to take effect — surprising and easy to miss.
+    const shortcutsChanged =
+      before.shortcutToggle !== next.shortcutToggle ||
+      before.shortcutPTT !== next.shortcutPTT ||
+      before.shortcutInterpreter !== next.shortcutInterpreter ||
+      before.pttEnabled !== next.pttEnabled;
+    if (shortcutsChanged) {
+      try { reRegisterShortcuts(); } catch (e) { console.warn('[ipc:set] reRegister failed', e); }
+    }
+    // Broadcast to every renderer (main + any secondary, e.g. future
+    // panels) so their Zustand store sees the new value without having
+    // to poll getSettings. Does NOT echo back to the sender — the
+    // invoke()'s return value already carries the new state.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      if (win.webContents === _e.sender) continue;
+      try { win.webContents.send(IPC.ON_SETTINGS_CHANGED, next); } catch { /* ignore */ }
+    }
+    return next;
+  });
 
   ipcMain.handle(IPC.GET_HISTORY, () => listHistory());
   ipcMain.handle(IPC.ADD_HISTORY, (_e, entry) => addHistory(entry));

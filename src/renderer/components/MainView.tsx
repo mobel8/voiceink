@@ -9,6 +9,7 @@ import { InterpretPlayer } from '../lib/interpret-player';
 import { ListenerPanel } from './ListenerPanel';
 import { VoiceQuickPopover } from './VoiceQuickPopover';
 import { blobToBase64 } from '../lib/blob';
+import { useT } from '../lib/i18n';
 
 export function MainView() {
   const {
@@ -21,6 +22,7 @@ export function MainView() {
     audioLevel, setAudioLevel,
     loadHistory,
   } = useStore();
+  const t = useT();
   const hasKey = !!settings.groqApiKey;
 
   const [copied, setCopied] = useState(false);
@@ -247,17 +249,16 @@ export function MainView() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-6 pb-3 flex items-end justify-between gap-4">
-        <div className="min-w-0">
+      <div className="pt-6 pb-3 flex items-end justify-between gap-4 flex-wrap" style={{ paddingLeft: 'clamp(1rem, 2.5vw, 1.5rem)', paddingRight: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
+        <div className="min-w-0 flex-1" style={{ minWidth: 'min(14rem, 60%)' }}>
           <h1 className="text-2xl font-bold tracking-tight truncate">
-            <span className="gradient-text">Dictée intelligente</span>
+            <span className="gradient-text">{t('main.title')}</span>
           </h1>
           <p className="text-white/50 text-xs mt-1">
-            Parlez. On transcrit en un éclair.{' '}
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70 text-[10px] border border-white/10">Espace</kbd> pour démarrer / arrêter.
+            {t('main.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
           <ModePicker />
           <LanguagePicker />
           <TranslatePicker />
@@ -284,7 +285,7 @@ export function MainView() {
       )}
 
       {/* Record area */}
-      <div className="flex-1 min-h-0 grid grid-rows-[1fr_auto] px-6 pb-5 gap-4">
+      <div className="flex-1 min-h-0 grid grid-rows-[1fr_auto] pb-5 gap-4" style={{ paddingLeft: 'clamp(1rem, 2.5vw, 1.5rem)', paddingRight: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
         <div className="glass-strong rounded-2xl flex flex-col items-center justify-center p-6 relative overflow-hidden">
           {/* Ambient dots */}
           <div className="absolute inset-0 opacity-[0.06]" style={{

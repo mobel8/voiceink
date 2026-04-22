@@ -145,7 +145,7 @@ export function AppearanceSection() {
 
       <div>
         <div className="label mb-3">Thème de couleurs</div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(11rem, 1fr))' }}>
           {THEME_ORDER.map((id) => (
             <ThemeCard
               key={id}
@@ -187,7 +187,7 @@ export function AppearanceSection() {
           format={(v) => `${v}px`}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))' }}>
           <ToggleChip
             icon={<Waves size={13} />}
             label="Aurora animée"

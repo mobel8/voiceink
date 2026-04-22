@@ -162,6 +162,22 @@ export interface Settings {
   shortcutToggle: string; // Electron accelerator
   shortcutPTT: string;    // Push-to-talk accelerator (press-and-hold)
   pttEnabled: boolean;    // Enable push-to-talk shortcut
+  /**
+   * Global accelerator that flips `interpreterEnabled` on/off without
+   * having to open Settings. Lets the user enable the voice translator
+   * with a single key combo from anywhere on the OS. Empty = unbound.
+   * Default: `CommandOrControl+Shift+I`.
+   */
+  shortcutInterpreter: string;
+  /**
+   * UI language of the VoiceInk app itself (menus, labels, buttons).
+   * Completely independent of `language` (which hints Whisper what
+   * language the USER is speaking). `'auto'` resolves at runtime to
+   * the OS/browser locale — see `src/shared/i18n.ts::resolveUILanguage`.
+   * Default: 'auto'. Shipping with FR + EN at launch; more locales are
+   * additive (just add a dictionary in i18n.ts, no other code change).
+   */
+  uiLanguage: 'auto' | 'fr' | 'en';
   /** Visual theme — palette ID (see `src/shared/themes.ts`). */
   themeId: ThemeId;
   /** Visual effects (glow intensity, blur, animations…). */
@@ -267,6 +283,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCopy: true,
   shortcutToggle: 'CommandOrControl+Shift+Space',
   shortcutPTT: 'CommandOrControl+Shift+V',
+  shortcutInterpreter: 'CommandOrControl+Shift+I',
+  uiLanguage: 'auto',
   pttEnabled: false,
   themeId: 'midnight',
   themeEffects: {
@@ -460,6 +478,14 @@ export const IPC = {
   EXPORT: 'voiceink:export',
   ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
   ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
+  /**
+   * Broadcast from main to every renderer whenever a setting changes —
+   * whether via the UI (SET_SETTINGS round-trip) or via a global
+   * accelerator (e.g. shortcutInterpreter flipping interpreterEnabled).
+   * Payload: the FULL new Settings object so the receiver can just
+   * `set({ settings: next })` without another round-trip.
+   */
+  ON_SETTINGS_CHANGED: 'voiceink:onSettingsChanged',
   WINDOW_MINIMIZE: 'voiceink:windowMinimize',
   WINDOW_CLOSE: 'voiceink:windowClose',
   WINDOW_MAXIMIZE: 'voiceink:windowMaximize',

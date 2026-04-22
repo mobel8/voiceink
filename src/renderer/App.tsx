@@ -11,7 +11,7 @@ import { applyTheme } from './lib/theme';
 import { getTheme, DEFAULT_EFFECTS } from '../shared/themes';
 
 export default function App() {
-  const { view, settings, setView, loadSettings, loadHistory } = useStore();
+  const { view, settings, setView, loadSettings, loadHistory, setSettingsFromBroadcast } = useStore();
 
   useEffect(() => {
     loadSettings();
@@ -24,6 +24,17 @@ export default function App() {
     };
     requestAnimationFrame(() => requestAnimationFrame(ready));
   }, [loadSettings, loadHistory]);
+
+  // Live-sync settings across windows (and from global-accelerator
+  // flips). Without this, pressing the interpreter hotkey flips
+  // `interpreterEnabled` in main but the emerald chip in this
+  // renderer still looks grey because it reads its own stale state.
+  useEffect(() => {
+    const unsub = window.voiceink?.onSettingsChanged?.((next: any) => {
+      setSettingsFromBroadcast(next);
+    });
+    return () => { try { unsub?.(); } catch { /* ignore */ } };
+  }, [setSettingsFromBroadcast]);
 
   // Flag the html/body so index.css can make everything transparent in pill
   // mode without affecting comfortable mode. The attribute is already set by

@@ -1,6 +1,6 @@
 {
   "name": "voiceink",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
   "author": {
     "name": "VoiceInk",
@@ -17,6 +17,7 @@
     "build:renderer": "npm run typecheck:renderer && vite build",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.json",
     "smoke:settings": "node scripts/smoke-settings.js",
+    "smoke:loop": "node scripts/loop-smoke.js",
     "start": "electron dist/main/index.js",
     "pack": "electron-builder --dir",
     "dist": "npm run build && electron-builder",
