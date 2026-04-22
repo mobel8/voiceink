@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES } from '../lib/constants';
 import { Settings, TTSProvider } from '../../shared/types';
@@ -58,11 +58,15 @@ export function SettingsView() {
         )}
       </div>
 
+      <SettingsNav />
+
       {/* Appearance (theme + effects) */}
-      <AppearanceSection />
+      <div id="sec-appearance" className="scroll-mt-20">
+        <AppearanceSection />
+      </div>
 
       {/* Interface */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-interface" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
           <Layout size={16} className="accent-text" />
           <h2 className="font-semibold text-lg">Interface</h2>
@@ -101,13 +105,17 @@ export function SettingsView() {
       </section>
 
       {/* Replacements / custom dictionary */}
-      <ReplacementsSection />
+      <div id="sec-replacements" className="scroll-mt-20">
+        <ReplacementsSection />
+      </div>
 
       {/* Voice Interpreter */}
-      <InterpreterSection />
+      <div id="sec-interpreter" className="scroll-mt-20">
+        <InterpreterSection />
+      </div>
 
       {/* Translation */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-translation" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
           <Languages size={16} className="text-fuchsia-300" />
           <h2 className="font-semibold text-lg">Traduction automatique</h2>
@@ -153,7 +161,7 @@ export function SettingsView() {
       </section>
 
       {/* Groq API */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-transcription" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Moteur de transcription</h2>
           <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
@@ -194,7 +202,7 @@ export function SettingsView() {
       </section>
 
       {/* Workflow */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-workflow" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <h2 className="font-semibold text-lg">Workflow</h2>
         <ToggleRow
           label="Copie automatique"
@@ -211,7 +219,7 @@ export function SettingsView() {
       </section>
 
       {/* LLM */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-llm" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Post-traitement LLM</h2>
           <Switch value={settings.llmEnabled} onChange={(v) => save({ llmEnabled: v })} />
@@ -254,7 +262,7 @@ export function SettingsView() {
       </section>
 
       {/* Shortcuts */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-shortcuts" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
           <Keyboard size={16} className="accent-text" />
           <h2 className="font-semibold text-lg">Raccourcis globaux</h2>
@@ -287,7 +295,7 @@ export function SettingsView() {
       </section>
 
       {/* System */}
-      <section className="glass rounded-2xl p-6 space-y-4">
+      <section id="sec-system" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
           <Power size={16} className="accent-text" />
           <h2 className="font-semibold text-lg">Système</h2>
@@ -314,6 +322,110 @@ export function SettingsView() {
           onChange={(v) => save({ soundsEnabled: v })}
         />
       </section>
+    </div>
+  );
+}
+
+/**
+ * Minimalist sticky navigation bar for the Settings view.
+ *
+ * Design goals (validated by users on 2026-04-22):
+ *   - Glanceable: icons only, no labels by default — tooltip on hover.
+ *   - Compact: single pill-shaped row, ~40px tall, self-centering.
+ *   - Live: IntersectionObserver highlights the currently visible
+ *     section as the user scrolls, so the nav doubles as a progress
+ *     indicator.
+ *   - Frictionless: one click = smooth scroll to the section's top,
+ *     accounting for the sticky nav's own height via `scroll-mt-20`.
+ *
+ * The ten sections map 1:1 with the <section id="sec-…"> blocks
+ * above, in the same top-to-bottom order that greets the user.
+ */
+const SETTINGS_SECTIONS: Array<{ id: string; icon: React.ComponentType<{ size?: number | string }>; label: string }> = [
+  { id: 'sec-appearance',    icon: Palette,       label: 'Apparence' },
+  { id: 'sec-interface',     icon: Layout,        label: 'Interface' },
+  { id: 'sec-replacements',  icon: Book,          label: 'Dictionnaire' },
+  { id: 'sec-interpreter',   icon: Volume2,       label: 'Traducteur vocal' },
+  { id: 'sec-translation',   icon: Languages,     label: 'Traduction' },
+  { id: 'sec-transcription', icon: Zap,           label: 'Transcription' },
+  { id: 'sec-workflow',      icon: WorkflowIcon,  label: 'Workflow' },
+  { id: 'sec-llm',           icon: Brain,         label: 'Post-traitement' },
+  { id: 'sec-shortcuts',     icon: Keyboard,      label: 'Raccourcis' },
+  { id: 'sec-system',        icon: Power,         label: 'Système' },
+];
+
+function SettingsNav() {
+  const [active, setActive] = useState(SETTINGS_SECTIONS[0].id);
+
+  useEffect(() => {
+    // Observer sur les sections. rootMargin aligné pour privilégier
+    // la section qui occupe le tiers supérieur du viewport (plus
+    // naturel quand on scrolle depuis le haut).
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Sélectionne la section intersectante la plus haute dans le
+        // viewport — évite les sautillements quand deux sections
+        // courtes sont visibles en même temps.
+        const visibles = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visibles[0]) setActive(visibles[0].target.id);
+      },
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0 },
+    );
+    SETTINGS_SECTIONS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActive(id);
+  };
+
+  return (
+    <div className="sticky top-0 z-20 -mx-8 px-8 pt-2 pb-3 pointer-events-none">
+      <nav
+        className="pointer-events-auto mx-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] px-1.5 py-1.5 w-fit"
+        aria-label="Navigation paramètres"
+      >
+        {SETTINGS_SECTIONS.map(({ id, icon: Icon, label }) => {
+          const isActive = active === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => scrollTo(id)}
+              className={`
+                group relative w-8 h-8 rounded-full flex items-center justify-center
+                transition-all duration-200 ease-out outline-none
+                ${isActive
+                  ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40 shadow-[0_0_10px_-2px_rgba(167,139,250,0.5)]'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'}
+              `}
+              aria-label={label}
+              aria-current={isActive ? 'true' : undefined}
+            >
+              <Icon size={14} />
+              <span
+                className="
+                  absolute top-full left-1/2 -translate-x-1/2 mt-2
+                  px-2 py-1 text-[10px] font-medium whitespace-nowrap
+                  bg-black/90 text-white/90 rounded-md border border-white/10
+                  opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                  pointer-events-none shadow-lg
+                "
+              >
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

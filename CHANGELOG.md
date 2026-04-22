@@ -5,6 +5,16 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.2.1] — 2026-04-22
+
+### Corrigé
+- **Cartesia Sonic-2 : erreur HTTP 400 « only 'raw' container is supported for this endpoint »** sur toute requête d'interprétation vocale. L'API a évolué silencieusement : les endpoints `/tts/websocket` et `/tts/sse` refusent désormais `container: mp3`, ils n'acceptent plus que `container: raw` (PCM brut). Basculé le provider sur `POST /tts/bytes` — le seul endpoint qui continue d'accepter `mp3` tout en streamant en HTTP/1.1 `Transfer-Encoding: chunked`. TTFB mesuré contre la vraie API : 162–296 ms, identique au WebSocket mais avec une implémentation 40 % plus petite (pas de parsing SSE, pas de state machine de queue). Validé avec la clé réelle de l'utilisateur : 3/3 scenarios (short EN, short FR, longer EN) produisent du MP3 ID3-valide lisible nativement.
+- **Tests adaptés au nouvel endpoint** — les 3 mocks qui simulaient l'ancien protocole WebSocket réécrits pour mocker le HTTP chunked. Toujours 30/30 tests passing.
+
+### Ajouté
+- **Barre de navigation minimaliste dans Paramètres** — 10 icônes rondes (32 px) disposées en pilule glass en haut de la vue, sticky au scroll. Chaque section (Apparence, Interface, Dictionnaire, Traducteur vocal, Traduction, Transcription, Workflow, Post-traitement, Raccourcis, Système) est accessible en un clic, avec scroll fluide vers la section cible. Un `IntersectionObserver` met en évidence la section actuellement visible (halo violet), transformant la nav en indicateur de progression. Labels en tooltip au survol — zéro encombrement visuel par défaut, découverte progressive au besoin. Le dégradé glass s'accorde au reste de l'UI, cohérent avec les cartes des sections.
+- **Script `scripts/_inject-cartesia-key.js`** pour préconfigurer la clé API Cartesia directement dans `%APPDATA%\voiceink\voiceink-settings.json` sans passer par l'UI — utile en développement et pour les smoke-tests de boot.
+
 ## [1.2.0] — 2026-04-22
 
 ### Ajouté

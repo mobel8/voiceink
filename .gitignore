@@ -11,6 +11,7 @@ Thumbs.db
 _*.bat
 _*.cmd
 _*.pid
+_*.mp3
 runtime.log
 tmp.cred
 cleanup.js
