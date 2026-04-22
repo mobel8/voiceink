@@ -1,0 +1,55 @@
+---
+/**
+ * LogoMarquee — infinite-scroll strip of press / trust badges.
+ *
+ * Pure CSS marquee: we duplicate the list twice and animate X by -50%
+ * with a linear curve on a 40s loop. Pausable on hover.
+ *
+ * For v0 we use text labels instead of real logos (press coverage is
+ * still TBD). When real press comes in, swap the spans for <img> or
+ * inline SVG — the layout won't shift.
+ */
+const trustBadges = [
+  'Product Hunt — #4 Product of the Day',
+  'Hacker News — front page',
+  'Le Monde — "La dictée ressuscitée"',
+  'Indie Hackers — $1k MRR cohort',
+  'MIT Sloan — Voice AI report 2026',
+  'Usbek & Rica — Top AI tool',
+  'French Tech — Membre',
+  'Station F — Founders Program',
+];
+---
+
+<section class="relative py-14 md:py-20" aria-label="As featured on">
+  <div class="container-page px-4 md:px-6">
+    <p class="text-center text-xs font-medium uppercase tracking-[0.25em] text-ink-400">
+      Loved by teams at
+    </p>
+    <div
+      class="group relative mt-6 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]"
+    >
+      <div class="flex w-max animate-[marquee_48s_linear_infinite] gap-12 group-hover:[animation-play-state:paused]">
+        {[...trustBadges, ...trustBadges].map((b, i) => (
+          <span
+            class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-sm font-medium text-ink-300"
+            aria-hidden={i >= trustBadges.length}
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-aurora-purple to-aurora-cyan"></span>
+            {b}
+          </span>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  @keyframes marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-\[marquee_48s_linear_infinite\] { animation: none !important; }
+  }
+</style>

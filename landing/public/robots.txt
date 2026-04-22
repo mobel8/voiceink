@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://voiceink.app/sitemap-index.xml

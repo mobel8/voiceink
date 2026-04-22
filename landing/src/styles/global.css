@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────────
+ * VoiceInk landing — global stylesheet
+ *
+ * Design system: Aurora UI + Glassmorphism + Motion-driven.
+ * Inspired by Linear, Vercel, Cartesia, Superhuman, Arc.
+ *
+ * Rules of thumb applied throughout:
+ *   - Respect `prefers-reduced-motion` — every non-essential animation
+ *     is gated behind a media query at the bottom of this file.
+ *   - Use `transform` + `opacity` for all transitions (GPU-accelerated,
+ *     60 fps even on mid-range laptops).
+ *   - Text contrast ≥ 4.5:1 on body, 3:1 on display (WCAG AA).
+ *   - One unique focus ring (`.focus-ring` utility), same across the
+ *     whole site — consistency matters for keyboard users.
+ * ─────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(167, 139, 250, 0.25);
+    --scrollbar-thumb-hover: rgba(167, 139, 250, 0.45);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Dynamic viewport units — fixes the mobile Safari "100vh jump"
+     * bug when the browser chrome expands/collapses on scroll. */
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse at top, rgba(167, 139, 250, 0.12), transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(34, 211, 238, 0.08), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+
+  /* Custom scrollbar — subtle, brand-tinted, non-intrusive. */
+  ::-webkit-scrollbar           { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track     { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb     {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); background-clip: padding-box; }
+
+  /* Selection — a touch of brand color instead of the default blue. */
+  ::selection { background: rgba(167, 139, 250, 0.35); color: white; }
+
+  /* Reduce jarring when images/illustrations load. */
+  img, video, svg { display: block; max-width: 100%; }
+
+  /* Default heading rhythm. Individual pages override via utilities. */
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+  p { text-wrap: pretty; }
+}
+
+@layer components {
+  /* ─── Glass card — the workhorse surface of the landing.
+   *    Used for feature cards, bento tiles, pricing cards, testimonials.
+   *    backdrop-filter is progressive: in unsupported browsers we fall
+   *    back to a slightly more opaque background so the shape is still
+   *    visible and legible. */
+  .glass {
+    background: rgba(20, 30, 51, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass { background: rgba(20, 30, 51, 0.88); }
+  }
+
+  .glass-strong {
+    background: rgba(10, 17, 36, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+  }
+
+  /* ─── Primary CTA button — glowing, gradient, weight-aware.
+   *    Interaction pattern: slight scale on hover + pulse ring that
+   *    breathes even at rest. Click feedback via scale(0.98) + drop
+   *    to keep the "pressed" sensation real. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-medium text-white relative overflow-hidden transition-all duration-200;
+    background: linear-gradient(135deg, #a78bfa 0%, #d946ef 45%, #f472b6 100%);
+    background-size: 200% 200%;
+    background-position: 0% 50%;
+    box-shadow:
+      0 8px 24px -4px rgba(167, 139, 250, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.1);
+  }
+  .btn-primary:hover {
+    background-position: 100% 50%;
+    transform: translateY(-1px);
+    box-shadow:
+      0 14px 32px -4px rgba(167, 139, 250, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.1);
+  }
+  .btn-primary:active { transform: translateY(0) scale(0.985); transition-duration: 100ms; }
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.3) 50%, transparent 65%);
+    transform: translateX(-100%);
+    transition: transform 650ms ease;
+  }
+  .btn-primary:hover::before { transform: translateX(100%); }
+
+  /* Secondary — ghost with border + hover brightness. */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-medium text-ink-100 relative transition-all duration-200;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+  }
+  .btn-secondary:active { transform: translateY(0); }
+
+  .btn-sm  { @apply px-4 py-2 text-sm rounded-xl; }
+
+  /* ─── Pill / chip — for badges, tags, "new" indicators. */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .pill-glow {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.25), rgba(217, 70, 239, 0.22));
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    color: #e9d5ff;
+    box-shadow: 0 0 24px -8px rgba(167, 139, 250, 0.5);
+  }
+
+  /* ─── Gradient text — used for brand accents in headlines. */
+  .text-gradient {
+    background: linear-gradient(120deg, #a78bfa 0%, #22d3ee 40%, #f472b6 80%, #fbbf24 100%);
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 6s ease-in-out infinite alternate;
+  }
+
+  /* ─── Aurora background blobs — used once in the hero.
+   *    Each blob is a single radial gradient sized larger than the
+   *    viewport and subtly animated via the `aurora` keyframe. */
+  .aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.55;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+
+  /* ─── Focus ring (keyboard only). */
+  .focus-ring:focus-visible {
+    outline: 2px solid #a78bfa;
+    outline-offset: 3px;
+    border-radius: inherit;
+  }
+
+  /* ─── Bento grid skeleton.
+   *    We use an explicit 6-column grid on desktop, collapsing to 1
+   *    column on mobile. The tiles pick column spans via their own
+   *    `col-span-*` classes so the grid itself doesn't need to know
+   *    about the content. */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  @media (min-width: 768px) {
+    .bento { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1.25rem; }
+  }
+
+  /* ─── Subtle noise overlay — applied to hero only.
+   *    Breaks the banding that pure gradients produce on OLED screens.
+   *    Generated by the SVG noise filter inline in BaseLayout. */
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.6 0 0 0 0 0.5 0 0 0 0 0.9 0 0 0 0.25 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+}
+
+@layer utilities {
+  /* Fluid spacing helpers */
+  .container-narrow { max-width: min(48rem, 92vw); margin-inline: auto; }
+  .container-page   { max-width: min(76rem, 94vw); margin-inline: auto; }
+
+  /* Stagger helper used by the fade-up effect on hero. */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  /* Hide scrollbar on horizontal scrollers (e.g. logos carousel). */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* ─── Scroll reveal — paired with BaseLayout's IntersectionObserver.
+   *    Start state hides the element 16px below its final position
+   *    and drops it to 0 opacity. `.is-revealed` is toggled on when
+   *    the element enters the viewport, producing a subtle fade-up
+   *    that feels modern without screaming for attention. */
+  [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+    transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+  [data-reveal].is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+  [data-reveal][data-reveal-delay="100"] { transition-delay: 100ms; }
+  [data-reveal][data-reveal-delay="200"] { transition-delay: 200ms; }
+  [data-reveal][data-reveal-delay="300"] { transition-delay: 300ms; }
+
+  /* ─── Glass tilt — paired with BaseLayout's pointermove handler.
+   *    Adds the 3D context so the JS-applied rotateX/Y transform
+   *    renders correctly. The `backface-visibility` flag avoids a
+   *    subtle flicker on the card's edge during interpolation. */
+  .glass-tilt {
+    transform-style: preserve-3d;
+    transform-origin: center center;
+    backface-visibility: hidden;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+}
+
+/* Honor the OS-level reduced-motion preference — legally required in
+ * the EU under the 2025 European Accessibility Act. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .aurora-blob { animation: none !important; opacity: 0.3 !important; }
+}

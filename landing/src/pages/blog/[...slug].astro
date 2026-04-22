@@ -1,0 +1,171 @@
+---
+/**
+ * Blog article renderer — static, SSR'd at build time for SEO.
+ * Astro injects the compiled content via <Content />.
+ *
+ * Typography is tuned for long-form reading:
+ *   - ~ 65-character reading line
+ *   - 1.7 line height on body
+ *   - Prose scaled at 17 px base (clamp in BaseLayout takes care of the rest)
+ *   - Generous top margin between sections
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, type CollectionEntry } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', ({ data }) => data.published);
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post },
+  }));
+}
+
+interface Props { post: CollectionEntry<'blog'>; }
+const { post } = Astro.props;
+const { Content } = await post.render();
+
+const ogTitle = `${post.data.title} — VoiceInk`;
+---
+
+<BaseLayout
+  title={ogTitle}
+  description={post.data.description}
+  canonical={`https://voiceink.app/blog/${post.slug}`}
+>
+  <article class="relative pt-12 pb-24 md:pt-16 md:pb-32">
+    <div class="container-narrow px-4 md:px-6">
+      <a href="/blog" class="focus-ring inline-flex items-center gap-1.5 text-sm text-ink-400 transition-colors hover:text-white">
+        <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 4 5 8l6 4" />
+        </svg>
+        All articles
+      </a>
+
+      <header class="mt-8">
+        <div class="flex items-center gap-3 text-xs uppercase tracking-wider text-ink-400">
+          <span class="pill">{post.data.category.replace('-', ' · ')}</span>
+          <time datetime={post.data.date.toISOString()}>{post.data.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</time>
+          {post.data.readingTime && <><span>·</span><span>{post.data.readingTime}</span></>}
+        </div>
+        <h1 class="mt-4 text-balance font-display text-hero font-semibold text-white">
+          {post.data.title}
+        </h1>
+        <p class="mt-4 max-w-prose text-ink-300 md:text-lg">
+          {post.data.description}
+        </p>
+      </header>
+
+      <div class="prose-article mt-12">
+        <Content />
+      </div>
+
+      <footer class="mt-16 rounded-3xl glass p-6 md:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p class="text-sm text-ink-400">Thanks for reading.</p>
+            <p class="mt-1 text-lg font-semibold text-white">Want the fastest voice AI on your desktop?</p>
+          </div>
+          <a href="/#download" class="btn-primary btn-sm focus-ring">Download VoiceInk Free</a>
+        </div>
+      </footer>
+    </div>
+  </article>
+
+  <style is:global>
+    .prose-article {
+      color: rgb(232 236 245 / 0.92);
+      font-size: 17px;
+      line-height: 1.75;
+      max-width: 42rem;
+    }
+    .prose-article h2 {
+      margin-top: 2.5rem; margin-bottom: 1rem;
+      font-family: var(--font-display, 'Geist', 'Inter', sans-serif);
+      font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em;
+      color: white; line-height: 1.2;
+    }
+    .prose-article h3 {
+      margin-top: 2rem; margin-bottom: 0.75rem;
+      font-family: var(--font-display, 'Geist', 'Inter', sans-serif);
+      font-size: 1.35rem; font-weight: 600;
+      color: white; line-height: 1.25;
+    }
+    .prose-article h4 {
+      margin-top: 1.5rem; margin-bottom: 0.5rem;
+      font-size: 1.1rem; font-weight: 600; color: white;
+    }
+    .prose-article p { margin-top: 1rem; margin-bottom: 1rem; }
+    .prose-article strong { color: white; font-weight: 600; }
+    .prose-article a {
+      color: #a78bfa;
+      text-decoration: underline;
+      text-decoration-color: rgba(167, 139, 250, 0.3);
+      text-underline-offset: 4px;
+      transition: color 150ms, text-decoration-color 150ms;
+    }
+    .prose-article a:hover {
+      color: white;
+      text-decoration-color: rgba(167, 139, 250, 0.8);
+    }
+    .prose-article ul, .prose-article ol {
+      margin-top: 1rem; margin-bottom: 1rem; padding-left: 1.25rem;
+    }
+    .prose-article ul { list-style: disc; }
+    .prose-article ol { list-style: decimal; }
+    .prose-article li { margin-top: 0.35rem; margin-bottom: 0.35rem; }
+    .prose-article li::marker { color: rgba(167, 139, 250, 0.6); }
+    .prose-article code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.9em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.375rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #e9d5ff;
+    }
+    .prose-article pre {
+      margin-top: 1.25rem; margin-bottom: 1.25rem;
+      padding: 1.25rem;
+      border-radius: 1rem;
+      background: rgba(5, 8, 22, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+    .prose-article pre code {
+      background: transparent; border: 0; padding: 0; font-size: inherit;
+    }
+    .prose-article blockquote {
+      margin-top: 1.25rem; margin-bottom: 1.25rem;
+      padding: 0.75rem 1.25rem;
+      border-left: 3px solid #a78bfa;
+      background: rgba(167, 139, 250, 0.05);
+      border-radius: 0.5rem;
+      font-style: italic;
+      color: rgb(232 236 245 / 0.85);
+    }
+    .prose-article table {
+      width: 100%;
+      margin-top: 1.5rem; margin-bottom: 1.5rem;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .prose-article th, .prose-article td {
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .prose-article th {
+      font-weight: 600; color: white;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .prose-article tr:last-child td { border-bottom: 0; }
+    .prose-article hr {
+      margin-top: 2.5rem; margin-bottom: 2.5rem;
+      border: 0;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(167, 139, 250, 0.4), transparent);
+    }
+  </style>
+</BaseLayout>

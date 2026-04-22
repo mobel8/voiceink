@@ -1,0 +1,114 @@
+---
+/**
+ * Comparison — tilt-aware table that highlights VoiceInk vs incumbents.
+ *
+ * We picked 3 competitors most of our ICP has heard of:
+ *   - Dragon (Medical / Legal) — old, heavy, expensive
+ *   - Otter.ai                 — modern but transcription-only
+ *   - Google Translate Voice   — free but slow and no streaming
+ *
+ * Rule: never lie, never strawman. If a competitor has a feature we
+ * don't (yet), we show a ✓ — honesty builds trust. We win on raw
+ * speed, price, and the combination of features in one app.
+ */
+
+interface Row {
+  feature: string;
+  voiceink: string | boolean;
+  dragon:   string | boolean;
+  otter:    string | boolean;
+  gtrans:   string | boolean;
+}
+
+const rows: Row[] = [
+  { feature: 'Voice-to-voice latency',        voiceink: '< 400 ms',   dragon: 'N/A',         otter: 'N/A',          gtrans: '~ 1.8 s' },
+  { feature: 'Dictation (speech-to-text)',    voiceink: true,         dragon: true,          otter: true,           gtrans: true      },
+  { feature: 'Live translation + speak',      voiceink: true,         dragon: false,         otter: false,          gtrans: true      },
+  { feature: 'Voice cloning',                 voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
+  { feature: 'Works offline (BYOK mode)',     voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
+  { feature: 'Virtual mic for Zoom/Discord',  voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
+  { feature: 'Custom vocabulary',             voiceink: true,         dragon: true,          otter: true,           gtrans: false     },
+  { feature: 'Starting price (pro)',          voiceink: '9.90 €/mo',  dragon: '~ 699 $/yr',  otter: '17 $/mo',      gtrans: 'Free'    },
+  { feature: 'Desktop-native app',            voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
+];
+
+const badge = (v: string | boolean) => {
+  if (v === true)  return { kind: 'yes' as const };
+  if (v === false) return { kind: 'no' as const };
+  return { kind: 'text' as const, text: v };
+};
+---
+
+<section class="relative py-20 md:py-32" aria-labelledby="compare-title">
+  <div class="container-page px-4 md:px-6">
+    <div class="mx-auto max-w-2xl text-center">
+      <div class="pill mx-auto">Straight talk</div>
+      <h2 id="compare-title" class="mt-4 text-display font-semibold text-white">
+        How we stack up.
+      </h2>
+      <p class="mt-4 text-ink-300 md:text-lg">
+        We didn\u2019t cherry-pick — these are the checkboxes the category
+        cares about. Some of these we don\u2019t (yet) do. Most we do
+        faster, cheaper, or both.
+      </p>
+    </div>
+
+    <div class="glass mx-auto mt-12 max-w-5xl overflow-hidden rounded-3xl">
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-left">
+          <thead>
+            <tr class="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-ink-400">
+              <th class="px-5 py-4 font-medium">Feature</th>
+              <th class="px-5 py-4 font-medium text-aurora-purple">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-aurora-purple via-aurora-pink to-aurora-cyan text-[10px] font-bold text-white">V</span>
+                  VoiceInk
+                </div>
+              </th>
+              <th class="px-5 py-4 font-medium">Dragon</th>
+              <th class="px-5 py-4 font-medium">Otter.ai</th>
+              <th class="px-5 py-4 font-medium">Translate Voice</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr class="border-b border-white/5 last:border-0 transition-colors hover:bg-white/[0.02]">
+                <th scope="row" class="px-5 py-4 text-sm font-medium text-ink-100">{row.feature}</th>
+                {(['voiceink', 'dragon', 'otter', 'gtrans'] as const).map((col) => {
+                  const b = badge(row[col]);
+                  const own = col === 'voiceink';
+                  return (
+                    <td class={`px-5 py-4 text-sm ${own ? 'bg-aurora-purple/[0.05]' : ''}`}>
+                      {b.kind === 'yes' && (
+                        <span class={`inline-flex h-6 w-6 items-center justify-center rounded-full ${own ? 'bg-aurora-cyan/20' : 'bg-emerald-400/10'}`}>
+                          <svg class={`h-3.5 w-3.5 ${own ? 'text-aurora-cyan' : 'text-emerald-300'}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 10.5l3.5 3.5L16 6" />
+                          </svg>
+                          <span class="sr-only">Yes</span>
+                        </span>
+                      )}
+                      {b.kind === 'no' && (
+                        <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/5">
+                          <span class="h-[2px] w-3 rounded-full bg-white/30" aria-hidden="true"></span>
+                          <span class="sr-only">No</span>
+                        </span>
+                      )}
+                      {b.kind === 'text' && (
+                        <span class={`font-mono text-xs ${own ? 'text-aurora-cyan' : 'text-ink-200'}`}>{b.text}</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="mx-auto mt-6 max-w-xl text-center text-xs text-ink-400">
+      Dragon and Otter are trademarks of their respective owners. Feature
+      comparison reflects public documentation as of Q2 2026.
+    </p>
+  </div>
+</section>

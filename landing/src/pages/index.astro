@@ -1,0 +1,48 @@
+---
+/**
+ * Home page — the one that matters.
+ *
+ * Section order chosen to mirror the proven Hero-Centric + Feature-Rich
+ * + Social-Proof + Pricing landing pattern (cf. the Ui/Ux Pro Max
+ * data in `data/landing.csv`, "Hero + Features + Testimonials + CTA").
+ *
+ * Every section is its own component so we can reuse them on vertical
+ * landings (e.g. /for/doctors just replaces Hero + adjusts Pricing).
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/Hero.astro';
+import VideoShowcase from '../components/VideoShowcase.tsx';
+import LogoMarquee from '../components/LogoMarquee.astro';
+import FeaturesBento from '../components/FeaturesBento.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Comparison from '../components/Comparison.astro';
+import Pricing from '../components/Pricing.tsx';
+import Testimonials from '../components/Testimonials.astro';
+import Roadmap from '../components/Roadmap.astro';
+import BlogPreview from '../components/BlogPreview.astro';
+import FAQ from '../components/FAQ.astro';
+import FinalCTA from '../components/FinalCTA.astro';
+---
+
+<BaseLayout
+  title="VoiceInk — speak once, the world understands"
+  description="The fastest voice-to-voice translator on your desktop. Dictate, interpret live conversations, or dub videos in 30 languages — all in under 400 ms."
+>
+  {/* Hero is already animated on its own (fade-up on each element)
+      — no need to wrap it in data-reveal. */}
+  <Hero />
+
+  {/* Every section below uses the IntersectionObserver-powered
+      scroll reveal defined in BaseLayout's inline script. */}
+  <div data-reveal><VideoShowcase client:visible /></div>
+  <div data-reveal><LogoMarquee /></div>
+  <div data-reveal><FeaturesBento /></div>
+  <div data-reveal><HowItWorks /></div>
+  <div data-reveal><Comparison /></div>
+  <div data-reveal><Pricing client:visible /></div>
+  <div data-reveal><Testimonials /></div>
+  <div data-reveal><Roadmap /></div>
+  <div data-reveal><BlogPreview /></div>
+  <div data-reveal><FAQ /></div>
+  <div data-reveal><FinalCTA /></div>
+</BaseLayout>

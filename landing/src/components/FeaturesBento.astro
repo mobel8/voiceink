@@ -1,0 +1,180 @@
+---
+/**
+ * FeaturesBento — Apple-style bento grid with 6 asymmetric tiles.
+ *
+ * Grid sizing (desktop, 6 columns wide):
+ *   Tile 1 — Live interpreter       col-span-4 row-span-2 (HERO feature)
+ *   Tile 2 — Voice cloning          col-span-2 row-span-2
+ *   Tile 3 — 4 dictation modes      col-span-2
+ *   Tile 4 — Always-on-top pill     col-span-2
+ *   Tile 5 — Virtual mic            col-span-2
+ *   Tile 6 — Privacy-first          col-span-6
+ *
+ * Rationale for 6 columns: gives us 1–2–3–4–6 clean span options and
+ * collapses to 1 column cleanly below 768 px.
+ *
+ * Each tile is a glass card with:
+ *   - A brand-tinted icon (Lucide, 28 px)
+ *   - A tight headline (≤ 6 words)
+ *   - A 1–2 sentence explanation
+ *   - An ambient decorative element (pill, waveform, gradient blob…)
+ *     that hints at the feature without needing a product screenshot.
+ */
+import {
+  Languages, Mic, Copy, Zap, Shield, Sparkles, Volume2, Globe, Pin, Keyboard, Ear, Users, Lock, FileText, Wand2, MonitorSpeaker,
+} from 'lucide-react';
+---
+
+<section id="features" class="relative py-20 md:py-32">
+  <div class="container-page px-4 md:px-6">
+    <div class="mx-auto max-w-3xl text-center">
+      <div class="pill mx-auto">
+        <span class="h-1.5 w-1.5 rounded-full bg-aurora-cyan shadow-glow-cyan"></span>
+        Everything, in one tiny pill
+      </div>
+      <h2 class="mt-4 text-display font-semibold text-white">
+        Built for people who <span class="text-gradient">talk faster than they type</span>.
+      </h2>
+      <p class="mt-4 text-ink-300 md:text-lg">
+        Seven flagship features, one beautiful interface, zero bloat.
+        Every detail is tuned for speed — a dictation finishes in the time
+        a competitor is still asking for permissions.
+      </p>
+    </div>
+
+    <div class="bento mt-12">
+      {/* Tile 1 — Live interpreter (hero feature) */}
+      <article class="glass glass-tilt md:col-span-4 md:row-span-2 group relative overflow-hidden rounded-3xl p-6 md:p-8">
+        <div class="relative z-10 flex h-full flex-col">
+          <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-purple/15 ring-1 ring-aurora-purple/30">
+            <Languages size={22} className="text-aurora-purple" />
+          </span>
+          <h3 class="mt-5 text-2xl font-semibold text-white">
+            Real-time voice interpreter
+          </h3>
+          <p class="mt-2 max-w-md text-sm text-ink-300 md:text-base">
+            Speak French, be heard in English. Or Spanish. Or Japanese.
+            VoiceInk transcribes, translates and speaks back in under
+            <span class="font-mono text-white"> 400 ms </span>
+            — that's faster than your neighbor's echo.
+          </p>
+          {/* Decorative waveform bars */}
+          <div class="mt-auto flex items-end gap-[3px] pt-8">
+            {Array.from({ length: 42 }).map((_, i) => (
+              <span
+                class="w-[4px] rounded-full bg-gradient-to-t from-aurora-purple to-aurora-pink"
+                style={`height: ${8 + ((i * 13) % 36)}px; opacity: ${0.25 + (i % 5) * 0.15};`}
+              ></span>
+            ))}
+          </div>
+        </div>
+        {/* Decorative orbit */}
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-60"
+          style="background: radial-gradient(circle, rgba(167,139,250,0.45), transparent 60%); filter: blur(24px);"
+        ></div>
+      </article>
+
+      {/* Tile 2 — Voice cloning */}
+      <article class="glass glass-tilt md:col-span-2 md:row-span-2 group relative overflow-hidden rounded-3xl p-6">
+        <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-pink/15 ring-1 ring-aurora-pink/30">
+          <Wand2 size={22} className="text-aurora-pink" />
+        </span>
+        <h3 class="mt-5 text-lg font-semibold text-white">Clone your voice. Dub everywhere.</h3>
+        <p class="mt-2 text-sm text-ink-300">
+          Upload 30 seconds of your voice and VoiceInk produces flawless
+          dubs in 30 languages — still sounding like you.
+        </p>
+        <div class="mt-6 space-y-2">
+          {['Your voice', 'In French', 'In Japanese', 'In Spanish'].map((label, i) => (
+            <div class={`flex items-center justify-between rounded-xl border border-white/5 px-3 py-2 text-xs ${i === 0 ? 'bg-aurora-pink/10' : 'bg-white/[0.02]'}`}>
+              <span class="text-white">{label}</span>
+              <span class="flex items-center gap-[2px]">
+                {Array.from({ length: 10 }).map((_, j) => (
+                  <span class={`w-[2px] rounded-full ${i === 0 ? 'bg-aurora-pink/70' : 'bg-white/20'}`} style={`height: ${4 + ((j + i * 3) % 3) * 4}px;`}></span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      {/* Tile 3 — 4 dictation modes */}
+      <article class="glass glass-tilt md:col-span-2 group relative overflow-hidden rounded-3xl p-6">
+        <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-cyan/15 ring-1 ring-aurora-cyan/30">
+          <FileText size={22} className="text-aurora-cyan" />
+        </span>
+        <h3 class="mt-4 text-lg font-semibold text-white">Four modes, one shortcut</h3>
+        <p class="mt-2 text-sm text-ink-300">
+          Raw, natural, formal or message — pick how polished your output
+          should be and VoiceInk rewrites on the fly.
+        </p>
+        <div class="mt-5 flex flex-wrap gap-1.5">
+          {['Raw', 'Natural', 'Formal', 'Message'].map((m, i) => (
+            <span class={`rounded-full px-2.5 py-1 text-xs ${i === 1 ? 'bg-aurora-cyan/20 text-aurora-cyan ring-1 ring-aurora-cyan/30' : 'bg-white/5 text-ink-300 ring-1 ring-white/5'}`}>
+              {m}
+            </span>
+          ))}
+        </div>
+      </article>
+
+      {/* Tile 4 — Always-on-top pill */}
+      <article class="glass glass-tilt md:col-span-2 group relative overflow-hidden rounded-3xl p-6">
+        <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-blue/15 ring-1 ring-aurora-blue/30">
+          <Pin size={22} className="text-aurora-blue" />
+        </span>
+        <h3 class="mt-4 text-lg font-semibold text-white">Pill mode — tiny, floating</h3>
+        <p class="mt-2 text-sm text-ink-300">
+          Shrink VoiceInk into a 176×52 px transparent pill. Always on top,
+          never in the way. Perfect for overlay dictation in any app.
+        </p>
+        <div class="mt-5 flex justify-center rounded-2xl bg-ink-950/50 p-4 ring-1 ring-white/5">
+          <div class="relative flex h-7 w-[176px] items-center gap-2 rounded-full bg-ink-900/80 px-3 ring-1 ring-white/10">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-aurora-pink opacity-75"></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-aurora-pink"></span>
+            </span>
+            <span class="text-[11px] font-medium text-white">Listening…</span>
+          </div>
+        </div>
+      </article>
+
+      {/* Tile 5 — Virtual mic */}
+      <article class="glass glass-tilt md:col-span-2 group relative overflow-hidden rounded-3xl p-6">
+        <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-amber/15 ring-1 ring-aurora-amber/30">
+          <MonitorSpeaker size={22} className="text-aurora-amber" />
+        </span>
+        <h3 class="mt-4 text-lg font-semibold text-white">Pipe into Zoom, Discord, Meet</h3>
+        <p class="mt-2 text-sm text-ink-300">
+          Virtual-microphone output lets the translated voice flow straight
+          into any conferencing app. Your teammates hear the translation in
+          real time — no bots required.
+        </p>
+      </article>
+
+      {/* Tile 6 — Privacy */}
+      <article class="glass glass-tilt md:col-span-6 group relative overflow-hidden rounded-3xl p-6 md:p-10">
+        <div class="grid gap-6 md:grid-cols-[auto_1fr_auto] md:items-center">
+          <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400/15 ring-1 ring-emerald-400/30">
+            <Lock size={24} className="text-emerald-300" />
+          </span>
+          <div>
+            <h3 class="text-xl font-semibold text-white">Your voice stays yours.</h3>
+            <p class="mt-2 max-w-2xl text-sm text-ink-300">
+              Audio is uploaded TLS-encrypted, transcribed, then thrown away.
+              We never train models on your data. BYOK mode lets you bypass
+              our broker entirely and use your own Groq / Cartesia keys —
+              zero bytes cross our servers.
+            </p>
+          </div>
+          <ul class="flex flex-wrap items-center gap-4 text-sm text-ink-200 md:justify-end">
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>TLS end-to-end</li>
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>No training on your data</li>
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>BYOK supported</li>
+          </ul>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>

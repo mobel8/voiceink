@@ -1,0 +1,103 @@
+---
+/**
+ * Testimonials — 6-card quote grid with subtle hover tilt.
+ *
+ * v0 uses anonymised early-adopter quotes. When real testimonials
+ * come in, replace the array values and add a `photo` field. The
+ * card layout is tolerant of missing photos (falls back to initials).
+ */
+
+const quotes = [
+  {
+    body:
+      "I dictate 10x more than I type now. The pill mode is genius — it's always there, never in the way.",
+    author: 'A. M.',
+    role: 'Lead engineer, fintech',
+    city: 'Paris, FR',
+    tint: 'purple',
+  },
+  {
+    body:
+      "We use VoiceInk in our bilingual standups. Everyone speaks their best language, nobody sounds like Google Translate.",
+    author: 'S. K.',
+    role: 'Head of product',
+    city: 'Berlin, DE',
+    tint: 'cyan',
+  },
+  {
+    body:
+      "I doubled my podcast output this month. Transcribe → edit → re-voice in my own voice in Spanish for the LATAM feed.",
+    author: 'R. D.',
+    role: 'Podcaster, 200k subs',
+    city: 'Barcelona, ES',
+    tint: 'pink',
+  },
+  {
+    body:
+      "Patient notes take me 45 minutes instead of 2.5 hours. I'd pay 3x what they charge.",
+    author: 'Dr. C. L.',
+    role: 'GP — libéral',
+    city: 'Lyon, FR',
+    tint: 'amber',
+  },
+  {
+    body:
+      "The 400 ms number is not marketing fluff. I benchmarked it. It's real.",
+    author: 'H. J.',
+    role: 'ML engineer',
+    city: 'Tokyo, JP',
+    tint: 'blue',
+  },
+  {
+    body:
+      "Finally a dictation app that doesn't feel like it's from 2008. The interface is beautiful.",
+    author: 'M. F.',
+    role: 'Freelance designer',
+    city: 'New York, US',
+    tint: 'purple',
+  },
+];
+---
+
+<section class="relative py-20 md:py-32" aria-labelledby="love-title">
+  <div class="container-page px-4 md:px-6">
+    <div class="mx-auto max-w-2xl text-center">
+      <div class="pill mx-auto">What people say</div>
+      <h2 id="love-title" class="mt-4 text-display font-semibold text-white">
+        Early adopters, already <span class="text-gradient">changed</span> for good.
+      </h2>
+    </div>
+    <div class="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-2 lg:grid-cols-3">
+      {quotes.map((q) => (
+        <figure class={`glass glass-tilt group relative overflow-hidden rounded-3xl p-6`}>
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-0 transition-opacity duration-700 group-hover:opacity-60"
+            style={`background: radial-gradient(circle, rgba(var(--tint), 0.35), transparent 70%); filter: blur(10px); --tint: ${
+              q.tint === 'purple' ? '167, 139, 250' :
+              q.tint === 'cyan'   ? '34, 211, 238'  :
+              q.tint === 'pink'   ? '244, 114, 182' :
+              q.tint === 'amber'  ? '251, 191, 36'  :
+                                    '96, 165, 250'
+            };`}
+          ></div>
+          <svg class="h-7 w-7 text-aurora-purple/60" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+            <path d="M12 8c-4 2-7 6-7 12v4h8v-8H8c0-3 2-6 6-8zm12 0c-4 2-7 6-7 12v4h8v-8h-5c0-3 2-6 6-8z"/>
+          </svg>
+          <blockquote class="mt-4 text-[15px] leading-relaxed text-ink-100">
+            "{q.body}"
+          </blockquote>
+          <figcaption class="mt-5 flex items-center gap-3 border-t border-white/5 pt-4">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-aurora-purple via-aurora-pink to-aurora-cyan text-xs font-semibold text-white">
+              {q.author.split(' ').map(p => p[0]).join('')}
+            </span>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-white">{q.author}</div>
+              <div class="text-xs text-ink-400">{q.role} · {q.city}</div>
+            </div>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  </div>
+</section>

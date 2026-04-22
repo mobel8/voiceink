@@ -1,0 +1,34 @@
+{
+  "name": "voiceink-landing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n css,astro -c magenta,cyan \"npm:watch:css\" \"astro dev --host\"",
+    "start": "concurrently -k -n css,astro -c magenta,cyan \"npm:watch:css\" \"astro dev --host\"",
+    "build": "npm run build:css && astro build",
+    "build:css": "tailwindcss -i src/styles/global.css -o public/styles/app.css --minify",
+    "watch:css": "tailwindcss -i src/styles/global.css -o public/styles/app.css --watch",
+    "preview": "astro preview --host",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/react": "^4.2.0",
+    "@astrojs/sitemap": "^3.2.1",
+    "astro": "^5.1.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.7.2"
+  }
+}

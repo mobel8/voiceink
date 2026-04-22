@@ -1,0 +1,80 @@
+---
+/**
+ * Blog index — paginated list of published posts, sorted newest first.
+ * Grouped visually by category with subtle color chips.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('blog', ({ data }) => data.published))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const categoryLabels: Record<string, { label: string; color: string }> = {
+  guide:              { label: 'Guide',        color: 'purple' },
+  comparison:         { label: 'Comparison',   color: 'cyan'   },
+  'vertical-health':  { label: 'Healthcare',   color: 'pink'   },
+  'vertical-legal':   { label: 'Legal',        color: 'amber'  },
+  'vertical-creators':{ label: 'Creators',     color: 'pink'   },
+  'vertical-teams':   { label: 'Teams',        color: 'blue'   },
+  announcement:       { label: 'Release',      color: 'cyan'   },
+  tutorial:           { label: 'Tutorial',     color: 'blue'   },
+};
+---
+
+<BaseLayout
+  title="VoiceInk Blog — guides, comparisons, tutorials"
+  description="Learn how to dictate faster, interpret conversations in real time, and dub videos in 30 languages. Product updates, tutorials and deep dives into voice AI."
+>
+  <section class="relative py-16 md:py-24">
+    <div class="container-page px-4 md:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <div class="pill mx-auto">VoiceInk Blog</div>
+        <h1 class="mt-4 text-display font-semibold text-white">
+          Guides, comparisons, tutorials.
+        </h1>
+        <p class="mt-4 text-ink-300 md:text-lg">
+          Everything we've learned building the fastest voice-to-voice
+          translator — shared openly so you can learn without running
+          the gauntlet.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-14 grid max-w-5xl gap-5 md:grid-cols-2">
+        {posts.map((post) => {
+          const cat = categoryLabels[post.data.category] ?? { label: 'Post', color: 'purple' };
+          return (
+            <a
+              href={`/blog/${post.slug}`}
+              class="glass group relative flex flex-col overflow-hidden rounded-3xl p-6 transition-transform duration-500 hover:-translate-y-1 focus-ring"
+            >
+              <div class="flex items-center gap-2 text-xs text-ink-400">
+                <span class={`pill text-aurora-${cat.color}`} style={`border-color: rgba(var(--chip-rgb), 0.3); --chip-rgb: ${
+                  cat.color === 'purple' ? '167,139,250' :
+                  cat.color === 'cyan'   ? '34,211,238'  :
+                  cat.color === 'pink'   ? '244,114,182' :
+                  cat.color === 'amber'  ? '251,191,36'  :
+                                           '96,165,250'
+                };`}>{cat.label}</span>
+                <span>·</span>
+                <time datetime={post.data.date.toISOString()}>{post.data.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</time>
+                {post.data.readingTime && <><span>·</span><span>{post.data.readingTime}</span></>}
+              </div>
+              <h2 class="mt-3 text-xl font-semibold text-white transition-colors group-hover:text-aurora-purple md:text-2xl">
+                {post.data.title}
+              </h2>
+              <p class="mt-2 line-clamp-3 text-sm text-ink-300">
+                {post.data.description}
+              </p>
+              <div class="mt-auto flex items-center gap-1 pt-4 text-sm text-aurora-purple opacity-0 transition-opacity group-hover:opacity-100">
+                Read article
+                <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 8h8m0 0-3-3m3 3-3 3" />
+                </svg>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  </section>
+</BaseLayout>

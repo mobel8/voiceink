@@ -1,0 +1,56 @@
+---
+/**
+ * FinalCTA — the last surface a scrolling user sees.
+ *
+ * Rule: only one call to action per final CTA section. We give two
+ * buttons but the secondary ("Watch demo") is visually muted so the
+ * eye lands on "Download for Windows".
+ *
+ * Background is a stylised aurora glow that implies the app's identity
+ * without re-using the hero's exact composition.
+ */
+import { Download, Play, ArrowRight } from 'lucide-react';
+---
+
+<section id="download" class="relative isolate overflow-hidden py-24 md:py-36">
+  <div class="absolute inset-0 -z-10" aria-hidden="true">
+    <div
+      class="aurora-blob animate-aurora"
+      style="width: 90vw; height: 90vw; left: 5vw; top: -40vw; background: radial-gradient(circle, rgba(167,139,250,0.55), transparent 55%);"
+    ></div>
+  </div>
+
+  <div class="container-narrow px-4 text-center md:px-6">
+    <h2 class="text-display font-semibold text-white">
+      Ready to <span class="text-gradient">never type again</span>?
+    </h2>
+    <p class="mx-auto mt-4 max-w-xl text-ink-300 md:text-lg">
+      Free forever. No credit card to install. Upgrade when the Free
+      cap starts cramping your style.
+    </p>
+    <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <a href="https://github.com/mobel8/voiceink/releases/latest" class="btn-primary focus-ring animate-pulse-glow">
+        <Download size={18} aria-hidden="true" />
+        Download for Windows
+        <ArrowRight size={16} className="opacity-80" />
+      </a>
+      <a href="#demo" class="btn-secondary focus-ring">
+        <Play size={16} aria-hidden="true" />
+        Watch 60 s demo
+      </a>
+    </div>
+
+    <div class="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {[
+        { k: '< 400 ms', v: 'voice-to-voice latency' },
+        { k: '30+',      v: 'languages supported' },
+        { k: '0 €',      v: 'to get started' },
+      ].map(s => (
+        <div class="glass rounded-2xl px-4 py-4">
+          <div class="font-display text-2xl font-semibold text-white">{s.k}</div>
+          <div class="text-xs text-ink-400">{s.v}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
