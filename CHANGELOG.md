@@ -5,6 +5,25 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.6.0] — 2026-04-22
+
+### Ajouté
+
+- **Option « Prononcer la traduction à voix haute »** — nouveau master switch global (`speakTranslations`, activé par défaut). Quand désactivé, seul le **texte traduit** est produit : aucun appel TTS n'est émis, les crédits Cartesia/ElevenLabs ne sont pas consommés, et aucun son ne sort. S'applique à la fois à l'**interprète vocal** (mode simple + mode continu VAD) et au mode **« Écouter une conversation »**. Disponible dans Paramètres → section Traducteur vocal, ET en **quick-toggle** (icône haut-parleur cliquable) directement à côté du chip « Interprète vocal » dans la vue dictée, pour couper/rétablir la voix en un clic sans plonger dans Paramètres.
+- **Transition animée entre mode normal et mode compact.** Auparavant le basculement densité recréait la fenêtre Electron (obligatoire : Electron ne permet pas de toggler `transparent: true` à chaud) avec un flip visuel brutal. Désormais : la fenêtre sortante fade-out (opacity + subtle scale, 120 ms) pendant que la nouvelle fenêtre, déjà chargée off-screen avec `is-entering` stamped par l'inline bootstrap de `index.html`, fade-in (180 ms, `cubic-bezier(0.2, 0.8, 0.2, 1)`). Cross-fade perçu ≈ 250-300 ms, aucun saut visuel, l'utilisateur ne voit plus deux fenêtres se télescoper.
+
+### Modifié
+
+- **`swapDensity()` orchestré** — envoie `voiceink:densitySwapOut` à la fenêtre sortante, attend 130 ms pour laisser jouer la transition CSS, puis `show()` la nouvelle fenêtre et `dispose()` l'ancienne. Le signal IPC est exposé au renderer via `preload.ts::onDensitySwapOut` et consommé dans `App.tsx` pour stamper `html.is-leaving`.
+- **`waitForFirstPaint()` avec soft-cap 400 ms** — si `ready-to-show` natif est arrivé mais le signal `renderer-ready` tarde (hydration React lente sur cold cache), on avance quand même. La fenêtre apparaît plus vite en cold path sans risquer le flash d'un shell vide, parce que le `#root.is-entering` maintient l'opacity à 0 jusqu'au 2e rAF quoi qu'il arrive. Hard-cap réduit de 2000 ms à 1500 ms.
+- **Gate TTS étanche** — `src/main/ipc.ts` (handlers `INTERPRET` et `SPEAK`) lit `settings.speakTranslations` et skip intégralement `streamTTS()` si `false`. Le `done` sentinel est toujours émis pour que le `MediaSource` du renderer ne stall pas. Côté renderer, `useContinuousInterpreter` reçoit un getter `speakEnabled` : quand `false`, aucun `InterpretPlayer` n'est construit du tout (pas de `MediaSource` à ouvrir, pas de chunks à consommer).
+
+### Notes techniques
+
+- **Choix « recreate window » préservé.** Electron ne supporte pas `win.setBackgroundColor('#01000000')` ni `win.setTransparent(true)` à chaud — toute tentative d'éviter la recréation (cache de deux fenêtres, toggle opacity via OS API…) coûte soit ≈+150 Mo de RAM permanente (double-pré-chargement), soit une instabilité inter-plateforme. La stratégie cross-fade via CSS est la seule qui garde l'empreinte mémoire constante et fonctionne uniformément Windows/macOS/Linux.
+- **Le fade-in démarre AVANT le `show()`.** Le renderer charge son bundle pendant que la fenêtre est `show: false` — `paintWhenInitiallyHidden: true` (déjà présent) autorise le compositor à peindre off-screen. Le 2e `requestAnimationFrame` dans `index.html` déclenche la transition CSS alors que la fenêtre est encore cachée. Quand `main` fait `win.show()`, soit le fade est déjà complet (si le load a pris > 200 ms), soit il reste 30-100 ms à jouer à l'écran. Dans les deux cas pas de flash.
+- **`speakTranslations` économise concrètement.** Une session interprète de 10 min produit ≈60-80 phrases ; à 1.5 c par caractère TTS, ≈$0.50-1.00/session. Couper le TTS ramène le coût à Whisper + LLM seuls (≈$0.05/session). Cas d'usage courant : démo à quelqu'un qui ne veut que lire les sous-titres, ou écoute d'un appel où un casque tiers joue déjà l'audio source.
+
 ## [1.5.1] — 2026-04-22
 
 ### Corrigé (hotfix critique)

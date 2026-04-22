@@ -34,6 +34,14 @@ export interface ContinuousInterpreterOptions {
   sourceLang: () => string | undefined;
   /** Output device id for the TTS player. Read on each phrase. */
   sinkId?: () => string | undefined;
+  /**
+   * Global master switch: when this getter returns false we skip
+   * every audio-playback side-effect (no InterpretPlayer, no
+   * MediaSource) — matching the main process which won't send any
+   * MP3 chunks either. Translate + onPhraseDone still fire so the
+   * UI can display the text.
+   */
+  speakEnabled?: () => boolean;
   /** Called when a new live RMS sample arrives (0..1), for waveform UI. */
   onLevel?: (rms: number) => void;
   /** Fired when a new phrase is detected and TTS audio starts playing. */
@@ -122,17 +130,25 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const shipBlob = useCallback(async (blob: Blob, mimeType: string) => {
     const requestId = `intc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const queue = queueRef.current!;
-    // Build the player in "held" mode — it will buffer MP3 chunks
-    // but stay silent until the queue authorizes playback. This is
-    // what prevents phrase N+1 from talking over phrase N.
-    const player = new InterpretPlayer(requestId, {
-      onEnd: () => queue.advance(player),
-      onError: (err) => {
-        optsRef.current.onError?.(err);
-        queue.advance(player);
-      },
-    }, { sinkId: optsRef.current.sinkId?.(), autoStart: false });
-    queue.add(player);
+    // Master mute — if the user disabled spoken output, we still ship
+    // the phrase (translate + onPhraseDone text) but we DO NOT build a
+    // player. No MediaSource is opened, no chunks are consumed, and
+    // the main process won't send any either. Saves work on both sides.
+    const speakOn = optsRef.current.speakEnabled ? optsRef.current.speakEnabled() : true;
+    let player: InterpretPlayer | null = null;
+    if (speakOn) {
+      // Build the player in "held" mode — it will buffer MP3 chunks
+      // but stay silent until the queue authorizes playback. This is
+      // what prevents phrase N+1 from talking over phrase N.
+      player = new InterpretPlayer(requestId, {
+        onEnd: () => { if (player) queue.advance(player); },
+        onError: (err) => {
+          optsRef.current.onError?.(err);
+          if (player) queue.advance(player);
+        },
+      }, { sinkId: optsRef.current.sinkId?.(), autoStart: false });
+      queue.add(player);
+    }
     optsRef.current.onPhraseStart?.({ requestId });
     try {
       const audioBase64 = await blobToBase64(blob);
@@ -149,13 +165,11 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
         // Surface error, tear down this player and advance the queue
         // so the next phrase doesn't stall behind a broken one.
         optsRef.current.onError?.(new Error(res.error || 'Interpret failed'));
-        player.dispose();
-        queue.advance(player);
+        if (player) { player.dispose(); queue.advance(player); }
       }
     } catch (err: any) {
       optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
-      player.dispose();
-      queue.advance(player);
+      if (player) { player.dispose(); queue.advance(player); }
     }
   }, []);
 

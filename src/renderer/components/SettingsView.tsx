@@ -510,6 +510,17 @@ function InterpreterSection() {
         une tournure dans une autre langue. Indépendant des 4 modes de dictée classiques.
       </p>
 
+      {/* Global master: mute spoken output (affects interpreter + listener). */}
+      <div className="pt-2 border-t border-white/5">
+        <ToggleRow
+          label="Prononcer la traduction à voix haute"
+          desc="Quand désactivé, seul le texte traduit est produit : aucun appel TTS n'est fait (Cartesia/ElevenLabs non sollicités, économies de crédits). S'applique aussi au mode « Écouter une conversation »."
+          icon={<Volume2 size={14} />}
+          value={settings.speakTranslations !== false}
+          onChange={(v) => save({ speakTranslations: v })}
+        />
+      </div>
+
       {settings.interpreterEnabled && (
         <div className="space-y-4 slide-up">
           {/* Target language */}

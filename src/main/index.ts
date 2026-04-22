@@ -330,6 +330,7 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
       settled = true;
       ipcMain.off('voiceink:renderer-ready', onRendererReady);
       clearTimeout(cap);
+      clearTimeout(softCap);
       resolve();
     };
 
@@ -348,14 +349,31 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
     ctx.win.once('ready-to-show', onReadyToShow);
     ipcMain.on('voiceink:renderer-ready', onRendererReady);
 
-    // Hard cap: show the window anyway after 2 s so a broken renderer
+    // Soft cap: if the native ready-to-show fired but rendererReady is
+    // still pending after 400 ms, proceed anyway. Happens on cold cache
+    // when React's hydration waits for a module that's slow to parse —
+    // the #root fade-in choreography doesn't depend on React having
+    // committed (the inline script in index.html drives it), so the
+    // user sees a smooth fade-in regardless.
+    const softCap = setTimeout(() => {
+      if (settled) return;
+      if (nativeReady) {
+        settled = true;
+        ipcMain.off('voiceink:renderer-ready', onRendererReady);
+        clearTimeout(cap);
+        resolve();
+      }
+    }, 400);
+
+    // Hard cap: show the window anyway after 1.5 s so a broken renderer
     // can never leave the user with a perpetually hidden pill/main window.
     const cap = setTimeout(() => {
       if (settled) return;
       settled = true;
       ipcMain.off('voiceink:renderer-ready', onRendererReady);
+      clearTimeout(softCap);
       resolve();
-    }, 2000);
+    }, 1500);
   });
 }
 
@@ -413,11 +431,14 @@ async function createWindow(): Promise<void> {
  * Strategy:
  *   1. Persist the new density so the incoming renderer hydrates correctly.
  *   2. Build the new window HIDDEN and load the renderer.
- *   3. Wait for its first paint (`ready-to-show`).
- *   4. Show new + hide old in the same tick; register the new HWND so
- *      focus tracking treats it as "ours" immediately.
- *   5. Update the `current` reference, then dispose the old ctx on the
- *      next macrotask (gives the compositor time to commit the new frame).
+ *   3. Wait for its first paint (`ready-to-show` + renderer-ready).
+ *   4. Kick off the OLD window's fade-out (CSS `html.is-leaving`, 120 ms),
+ *      in parallel with the NEW window's built-in fade-in (the inline
+ *      script in `index.html` stamps `is-entering` at parse time, then
+ *      clears it at the 2nd rAF — so the 180 ms fade is either complete
+ *      or already mid-flight by the time we make the window visible).
+ *   5. Wait ~130 ms for the fade-out to (mostly) finish, then show the
+ *      new window and dispose the old one on the next tick.
  *
  * Calls are serialised via `swapInFlight` so repeated clicks can't race.
  */
@@ -442,20 +463,31 @@ async function swapDensity(density: Density): Promise<void> {
     }
     await waitForFirstPaint(next);
 
-    // 3. Swap atomically. Windows show/hide on frameless+transparent
-    //    windows is synchronous and produces no animation.
+    // 3. Tell the OLD renderer to fade-out (120 ms CSS transition).
+    //    The new renderer, off-screen, is already mid-fade-in from its
+    //    inline bootstrap. We give the fade-out ~130 ms to play before
+    //    swapping the windows — perceived as a cross-fade, not a flip.
     const wasVisible = prev ? prev.win.isVisible() : true;
+    if (prev && !prev.win.isDestroyed() && wasVisible) {
+      try { prev.win.webContents.send('voiceink:densitySwapOut'); } catch { /* ignore */ }
+      await new Promise<void>((r) => setTimeout(r, 130));
+    }
+
+    // 4. Show the new window. Its #root is either already at opacity 1
+    //    (if load took > 180 ms) or still animating — either way the
+    //    visual is smooth because we never show an opaque new frame on
+    //    top of an opaque old one.
     if (wasVisible) {
       if (density === 'compact') next.win.showInactive();
       else next.win.show();
     }
     registerOwnWindow(next.win);
 
-    // 4. Flip the reference atomically. From here on, `getWin()` points
+    // 5. Flip the reference atomically. From here on, `getWin()` points
     //    at the new window.
     current = next;
 
-    // 5. Defer the teardown a tick so the new frame is guaranteed to be
+    // 6. Defer the teardown a tick so the new frame is guaranteed to be
     //    on-screen before the old HWND vanishes (avoids a 1-frame flash
     //    on some GPU drivers).
     if (prev) {

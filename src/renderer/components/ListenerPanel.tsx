@@ -70,9 +70,13 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [listener.segments.length]);
 
-  // Audio mode — speak each new *translated* segment via TTS.
+  // Audio mode — speak each new *translated* segment via TTS. Gated
+  // by BOTH `listenerMode === 'audio'` (per-feature toggle) AND the
+  // global `speakTranslations` master (same kill-switch that silences
+  // the interpreter). When the master is OFF, we don't even hit IPC.
   useEffect(() => {
     if ((settings.listenerMode || 'text') !== 'audio') return;
+    if (settings.speakTranslations === false) return;
     const segs = listener.segments;
     if (segs.length === 0) return;
     const last = segs[segs.length - 1];
@@ -99,7 +103,7 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
       player.dispose();
       queue.advance(player);
     });
-  }, [listener.segments, settings.listenerMode, settings.listenerTargetLang, settings.ttsSinkId]);
+  }, [listener.segments, settings.listenerMode, settings.listenerTargetLang, settings.ttsSinkId, settings.speakTranslations]);
 
   const copyToClipboard = async (seg: ListenerSegment) => {
     const text = seg.translated ? `${seg.text}\n→ ${seg.translated}` : seg.text;

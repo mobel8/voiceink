@@ -26,15 +26,28 @@
          evaluates prevents the one-frame flash of the wrong chrome during a
          density hot-swap. The window's backgroundColor (transparent for the
          pill, #07070d for the main window) takes care of the paint before
-         the CSS bundle finishes loading. */
+         the CSS bundle finishes loading.
+
+         We also stamp `is-entering` so the renderer's first frame starts
+         at opacity 0 (see `#root.is-entering` in index.css). Two rAFs
+         later we clear the class, which triggers the fade-in — the CSS
+         transition duration runs even inside a hidden BrowserWindow,
+         so by the time main's swapDensity() shows the window the fade
+         has either completed (steady state) or is already mid-flight. */
       (function () {
         try {
           var h = (location.hash || '').replace('#', '');
-          // Strip optional "-sampler" test suffix.
-          h = h.replace(/-sampler$/, '');
+          // Strip optional "-sampler" test suffix + smoke-test view suffix.
+          h = h.replace(/-sampler/, '').replace(/;view=\w+$/, '');
           if (h === 'compact' || h === 'comfortable') {
             document.documentElement.setAttribute('data-density', h);
           }
+          document.documentElement.classList.add('is-entering');
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              document.documentElement.classList.remove('is-entering');
+            });
+          });
         } catch (_) { /* no-op */ }
       })();
     </script>

@@ -212,6 +212,15 @@ export interface Settings {
    */
   ttsSpeed: number;
   /**
+   * Global master switch for spoken output. When OFF, the interpreter
+   * and listener still produce the translated *text*, but the main
+   * process skips every TTS call entirely — saving Cartesia/ElevenLabs
+   * credits and avoiding any audio playback. Orthogonal to
+   * `listenerMode`: if this master is OFF, the listener's "audio"
+   * preset is silenced just like the interpreter.
+   */
+  speakTranslations: boolean;
+  /**
    * Audio output device ID (as returned by MediaDevices.enumerateDevices).
    * Empty = default speakers. Set to a virtual-mic deviceId (VB-Cable,
    * VoiceMeeter, Krisp…) to route the translated audio to Discord /
@@ -291,6 +300,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ttsApiKey: {},
   ttsSpeed: 1.0,
   ttsSinkId: '',
+  speakTranslations: true,
   listenerEnabled: false,
   listenerInputDeviceId: '',
   listenerTargetLang: 'fr',

@@ -158,6 +158,7 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     'interpreterEnabled',
     'interpreterContinuous',
     'listenerEnabled',
+    'speakTranslations',
   ];
   for (const k of boolFields) {
     if (isBoolean(p[k as string])) (out as any)[k] = p[k as string];

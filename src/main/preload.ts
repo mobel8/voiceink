@@ -152,6 +152,19 @@ const api = {
    * painting the (possibly wrong-for-its-size) shell frame.
    */
   rendererReady: () => ipcRenderer.send('voiceink:renderer-ready'),
+
+  /**
+   * Main fires this signal on the OUTGOING renderer just before it
+   * hides + destroys the old window during a density swap. The
+   * renderer adds `is-leaving` to <html> so the CSS fade-out plays
+   * while the new window finishes painting off-screen. See the
+   * "Density swap" CSS block in `index.css` for the transition rules.
+   */
+  onDensitySwapOut: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('voiceink:densitySwapOut', listener);
+    return () => ipcRenderer.removeListener('voiceink:densitySwapOut', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('voiceink', api);

@@ -53,6 +53,18 @@ export default function App() {
     return () => unsub?.();
   }, [setView]);
 
+  // Density swap choreography — when main is about to destroy THIS
+  // window, it fires `densitySwapOut`. We stamp `is-leaving` on
+  // <html> to trigger the CSS fade-out defined in index.css. Main
+  // waits ~130 ms after sending the signal before actually swapping
+  // windows, giving the 120 ms CSS transition time to play.
+  useEffect(() => {
+    const unsub = window.voiceink?.onDensitySwapOut?.(() => {
+      document.documentElement.classList.add('is-leaving');
+    });
+    return () => { try { unsub?.(); } catch { /* ignore */ } };
+  }, []);
+
   const compact = settings.density === 'compact';
 
   // Pill mode: just the floating widget, no frame/titlebar/sidebar/aurora.

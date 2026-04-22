@@ -58,6 +58,49 @@
 html, body, #root { height: 100%; margin: 0; }
 html { color-scheme: dark; }
 
+/* =========================================================
+   Density swap — fade-in / fade-out choreography.
+   -----------------------------------------------------------
+   Electron cannot toggle `transparent: true` at runtime, so
+   `swapDensity()` in main/index.ts destroys the old window
+   and builds a new one. Without this choreography the two
+   windows overlap for a single frame and the user sees a
+   brutal "flip". Instead:
+     1. The entering window's #root starts at opacity 0 +
+        subtle scale (html.is-entering), and the inline
+        bootstrap script in index.html clears the class at
+        the 2nd rAF → CSS transitions in over 180 ms.
+     2. Just before disposing the old window, main sends
+        `voiceink:densitySwapOut` → the old renderer adds
+        html.is-leaving → opacity fades out over 120 ms.
+   Total perceived cross-fade: ≈ 250-300 ms, feels fluid.
+   ========================================================= */
+#root {
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: opacity, transform;
+}
+html.is-entering #root {
+  opacity: 0;
+  transform: scale(0.985);
+}
+html.is-leaving #root {
+  opacity: 0;
+  transform: scale(0.99);
+  transition:
+    opacity 120ms ease-in,
+    transform 120ms ease-in;
+}
+/* Reduced-motion users: keep the fade but skip the transform
+   to avoid any motion-sickness trigger. */
+@media (prefers-reduced-motion: reduce) {
+  html.is-entering #root,
+  html.is-leaving #root {
+    transform: none;
+  }
+}
+
 body {
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system,
                'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji',

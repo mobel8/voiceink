@@ -13,11 +13,14 @@
 //   2 — Timed out waiting for the window to appear
 //
 // Usage:
-//   node scripts/_smoke-settings.js
+//   npm run smoke:settings
+//   # or directly:
+//   node scripts/smoke-settings.js
 //
-// Prerequisites: `dist/main` and `dist/renderer` must already be built.
-// The script does NOT rebuild — call it after `_build-main.js` +
-// `_build-renderer.js` so it tests exactly the bundles that ship.
+// Prerequisites: `dist/main` and `dist/renderer` must already be built
+// (e.g. via `npm run build`). The script does NOT rebuild — call it
+// after a build so it tests exactly the bundles that would ship in
+// the installer.
 //
 // The timeout is intentionally long (12 s) because the first-run
 // settings load goes through `voiceink.getSettings` IPC which touches

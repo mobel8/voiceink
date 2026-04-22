@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Globe, Volume2, Radio } from 'lucide-react';
+import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Globe, Volume2, VolumeX, Radio } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { useContinuousInterpreter } from '../hooks/useContinuousInterpreter';
@@ -61,11 +61,19 @@ export function MainView() {
           playerRef.current?.dispose();
           const requestId = `int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const targetLang = settings.interpretTargetLang || 'en';
-          const player = new InterpretPlayer(requestId, {
-            onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
-            onError: (err) => console.warn('[interpret-player]', err.message),
-          }, { sinkId: settings.ttsSinkId });
-          playerRef.current = player;
+          // Only wire up an audio player when the global master switch
+          // is ON. When it's OFF, main still sends a single done-sentinel
+          // over ON_INTERPRET_CHUNK — skipping the player entirely keeps
+          // us from constructing a MediaSource we'd immediately dispose.
+          if (settings.speakTranslations !== false) {
+            const player = new InterpretPlayer(requestId, {
+              onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
+              onError: (err) => console.warn('[interpret-player]', err.message),
+            }, { sinkId: settings.ttsSinkId });
+            playerRef.current = player;
+          } else {
+            playerRef.current = null;
+          }
           const res = await window.voiceink.interpret({
             requestId,
             audioBase64,
@@ -134,6 +142,7 @@ export function MainView() {
     targetLang: () => settings.interpretTargetLang || 'en',
     sourceLang: () => (settings.language === 'auto' ? undefined : settings.language),
     sinkId: () => settings.ttsSinkId || undefined,
+    speakEnabled: () => settings.speakTranslations !== false,
     onLevel: (rms) => setAudioLevel(rms),
     onPhraseStart: () => {
       // On passe en 'processing' pour que l'UI reflète l'activité TTS
@@ -517,6 +526,12 @@ function InterpreterPicker() {
               select, so the user never has to jump into Settings just
               to swap a voice mid-session. */}
           <VoiceQuickPopover />
+          {/* Master mute — same behaviour as the Settings toggle but
+              one click away. When OFF, only the translated text is
+              produced (no TTS call, no audio playback) — saves
+              Cartesia/ElevenLabs credits when the user just wants to
+              read the translation. */}
+          <SpeakMuteQuickToggle />
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); updateSettings({ interpreterEnabled: false }); }}
@@ -531,6 +546,38 @@ function InterpreterPicker() {
         </>
       )}
     </label>
+  );
+}
+
+/**
+ * Tiny speaker/mute icon-button that flips `settings.speakTranslations`.
+ * Rendered inside `InterpreterPicker` whenever the interpreter is on, so
+ * the user can silence spoken output (and save TTS credits) with a
+ * single click — no need to open Settings.
+ */
+function SpeakMuteQuickToggle() {
+  const { settings, updateSettings } = useStore();
+  const on = settings.speakTranslations !== false;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); updateSettings({ speakTranslations: !on }); }}
+      title={on ? 'Couper la voix (texte seul)' : 'Réactiver la voix'}
+      aria-label={on ? 'Couper la voix traduite' : 'Activer la voix traduite'}
+      aria-pressed={on}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        color: on ? '#6ee7b7' : 'rgba(255,255,255,0.45)',
+        cursor: 'pointer',
+        padding: '0 4px',
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+      }}
+    >
+      {on ? <Volume2 size={12} /> : <VolumeX size={12} />}
+    </button>
   );
 }
 

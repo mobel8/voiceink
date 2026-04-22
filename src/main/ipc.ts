@@ -327,9 +327,16 @@ export function registerIpc(): void {
       let ttsQueue: Promise<void> = Promise.resolve();
       let firstSentenceSent = false;
 
+      // Global master switch — when OFF, we skip every TTS call (saves
+      // API credits) and the renderer will only show the translated
+      // text. The translate stream still runs because the user WANTS
+      // the text.
+      const speakOn = settings.speakTranslations !== false;
+
       for await (const delta of streamTranslate(rawText, req.targetLang, settings, r.language)) {
         translatedFull += delta;
         pending += delta;
+        if (!speakOn) continue;
         // Scan the pending buffer for a natural sentence boundary.
         // We look for the LAST terminal mark so a single multi-sentence
         // delta gets split into two TTS calls if the model emits it in
@@ -345,23 +352,28 @@ export function registerIpc(): void {
           }
         }
       }
-      console.log(`[interpret] translate stream done in ${Date.now() - t2}ms → "${translatedFull.slice(0, 80)}"`);
+      console.log(`[interpret] translate stream done in ${Date.now() - t2}ms → "${translatedFull.slice(0, 80)}"${speakOn ? '' : ' (TTS disabled)'}`);
 
-      // Whatever is left in `pending` after the stream closes is the
-      // tail (if we split) or the full translation (if we never hit a
-      // sentence mark — one-word inputs, abbreviations, etc.).
-      const tail = pending.trim();
-      if (tail.length > 0) {
-        ttsQueue = ttsQueue.then(() => dispatchTTS(tail));
+      if (speakOn) {
+        // Whatever is left in `pending` after the stream closes is the
+        // tail (if we split) or the full translation (if we never hit a
+        // sentence mark — one-word inputs, abbreviations, etc.).
+        const tail = pending.trim();
+        if (tail.length > 0) {
+          ttsQueue = ttsQueue.then(() => dispatchTTS(tail));
+        }
       }
       // If the stream produced nothing useful, fall back to the one-shot
-      // translate so the user still gets audio. Should be rare.
+      // translate so the user still gets the text (and audio if enabled).
+      // Should be rare.
       if (!translatedFull.trim()) {
         console.warn('[interpret] translate stream produced empty output, falling back to one-shot');
         const oneShot = await translateText(rawText, req.targetLang, settings, r.language);
         if (oneShot.trim()) {
           translatedFull = oneShot;
-          ttsQueue = ttsQueue.then(() => dispatchTTS(oneShot));
+          if (speakOn) {
+            ttsQueue = ttsQueue.then(() => dispatchTTS(oneShot));
+          }
         }
       }
 
@@ -371,6 +383,8 @@ export function registerIpc(): void {
       const translated = translatedFull.trim();
 
       // Flush sentinel so the renderer can close its MediaSource buffer.
+      // Always sent, even when TTS is off, so the renderer's queue
+      // state-machine resolves cleanly instead of waiting forever.
       send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
 
       const durationMs = Date.now() - t0;
@@ -483,6 +497,13 @@ export function registerIpc(): void {
     let ttfbMs: number | undefined;
     try {
       const settings = getSettings();
+      // Master mute — skip TTS entirely, but still fire the done
+      // sentinel so the renderer's MediaSource queue resolves instead
+      // of stalling (InterpretPlayer would otherwise leak buffers).
+      if (settings.speakTranslations === false) {
+        send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
+        return { ok: true, requestId: req.requestId };
+      }
       const t0 = Date.now();
       const iter = streamTTS(settings, req.text, { language: req.language });
       for await (const { chunk, mime } of iter) {
