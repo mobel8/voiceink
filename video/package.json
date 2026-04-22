@@ -1,0 +1,34 @@
+{
+  "name": "voiceink-promo-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "60-second promotional video for VoiceInk, built with Remotion.",
+  "scripts": {
+    "start": "remotion studio",
+    "studio": "remotion studio",
+    "render": "remotion render VoiceInkPromo out/voiceink-promo-1080p.mp4 --codec h264 --crf 15",
+    "render:4k": "remotion render VoiceInkPromo out/voiceink-promo-4k.mp4 --codec h264 --crf 15 --scale 2",
+    "render:gif": "remotion render VoiceInkPromoShort out/voiceink-promo.gif --codec gif --every-nth-frame 2",
+    "render:social": "remotion render VoiceInkPromoVertical out/voiceink-promo-vertical.mp4 --codec h264 --crf 18",
+    "upgrade": "remotion upgrade",
+    "build": "remotion bundle"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.400",
+    "@remotion/cli": "4.0.400",
+    "@remotion/google-fonts": "4.0.400",
+    "@remotion/shapes": "4.0.400",
+    "@remotion/tailwind-v4": "4.0.400",
+    "@remotion/transitions": "4.0.400",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.400"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/react": "19.0.0",
+    "@types/web": "0.0.194",
+    "tailwindcss": "^4.0.0",
+    "typescript": "5.7.2"
+  }
+}
