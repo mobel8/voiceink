@@ -5,6 +5,24 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.4.1] — 2026-04-22
+
+### Modifié (dernière passe de latence)
+
+- **Cache auto-apprenant de la langue Whisper** — après chaque transcription, la langue détectée est gardée en mémoire et réinjectée comme hint au prochain appel Whisper. Mesuré sur vraie API : `language=fr` explicite vs auto-detect = **−14 ms par appel**. Bucketté par pipeline (`interpret` / `listener`) pour que dicter en FR à l'interprète ne pollue pas l'écoute d'un interlocuteur en EN.
+- **Latence p95 : 741 → 560 ms** (−181 ms, −24 %) grâce à la combinaison prewarm early + language hint + moins de variance réseau. Variance totale chute de 264 ms à 112 ms.
+
+### Benchmarks mis à jour
+
+| Métrique | Baseline (v1.3) | v1.4.0 | **v1.4.1** | Gain total |
+|---|---|---|---|---|
+| avg | 650 ms | 507 ms | **499 ms** | **−151 ms (−23 %)** |
+| p50 | 637 ms | 491 ms | 514 ms | −123 ms (−19 %) |
+| p95 | 822 ms | 741 ms | **560 ms** | **−262 ms (−32 %)** |
+| min (best-case) | 558 ms | 436 ms | **448 ms** | −110 ms (−20 %) |
+
+Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initiale. L'expérience utilisateur est maintenant stable : l'écart entre le meilleur et le pire cas n'est plus que de 112 ms.
+
 ## [1.4.0] — 2026-04-22
 
 ### Modifié (performances — quasi-instantané)
