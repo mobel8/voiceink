@@ -66,6 +66,16 @@ scripts/_*.out
 scripts/_*.pid
 scripts/_*.ps1
 scripts/_*.txt
+scripts/_logs/
+
+# Debug/inspection HTML/CSS dumps (landing CSS pipeline triage)
+landing*.html
+landing*.css
+landing_prod.html
+landing_full.html
+landing_index.html
+landing_css.css
+landing2.html
 scripts/run-regression-suite.js
 scripts/run-exercise-loop.js
 scripts/run-foreground-loop.js
