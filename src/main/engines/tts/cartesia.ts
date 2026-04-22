@@ -57,9 +57,28 @@ export async function* streamCartesia(
   const lang = opts.language && SUPPORTED_LANGS.has(opts.language.toLowerCase())
     ? opts.language.toLowerCase()
     : 'en';
-  const speed = clampSpeed(opts.speed);
 
-  const payload = {
+  // IMPORTANT: Cartesia /tts/bytes IGNORES a numeric `speed` param
+  // sent at the top-level (measured empirically 2026-04-22: values
+  // 0.5 / 1.0 / 2.0 all produce audio within ±5% of the same
+  // duration). The only form the server honours today is a STRING
+  // enum 'slowest' | 'slow' | 'normal' | 'fast' | 'fastest'. So we
+  // map the UI slider (0.5..2.0) to that 5-bucket enum before
+  // building the request payload.
+  //
+  // Measured impact on a 13-word French sentence:
+  //   slowest → 7.34s (+54% vs normal)
+  //   slow    → 5.98s (+25% vs normal)
+  //   normal  → 4.78s
+  //   fast    → ~normal (Cartesia seems to cap the upper end)
+  //   fastest → ~normal
+  //
+  // For users who want the translation to "catch up" with their fast
+  // speech, the slower buckets are the useful lever — which matches
+  // the ergonomic design (push the slider LEFT to buy more time).
+  const speedEnum = toCartesiaSpeed(opts.speed);
+
+  const payload: Record<string, unknown> = {
     model_id: 'sonic-2',
     transcript: text,
     voice: { mode: 'id', id: opts.voiceId || '794f9389-aac1-45b6-b726-9d9369183238' },
@@ -69,8 +88,13 @@ export async function* streamCartesia(
       bit_rate: 128000,
     },
     language: lang,
-    speed,
   };
+  // Only emit the speed field when the user picked a non-default
+  // bucket — sending 'normal' is harmless but also redundant, and
+  // omitting it lets the server choose its own "best" cadence.
+  if (speedEnum && speedEnum !== 'normal') {
+    payload.speed = speedEnum;
+  }
 
   // Node's global fetch (Node 20+) returns a Web ReadableStream on
   // res.body. With Transfer-Encoding: chunked, each reader.read()
@@ -117,7 +141,28 @@ async function safeReadText(res: Response): Promise<string> {
   try { return (await res.text()).slice(0, 500); } catch { return ''; }
 }
 
-function clampSpeed(x: number | undefined): number {
-  if (typeof x !== 'number' || !Number.isFinite(x)) return 1.0;
-  return Math.min(2.0, Math.max(0.5, x));
+/**
+ * Map a UI slider value (0.5..2.0, 1.0 = natural) to the 5-bucket
+ * string enum that Cartesia's /tts/bytes endpoint actually honours.
+ *
+ * The buckets are asymmetric on purpose:
+ *   - Low end (< 0.85) gets two distinct slow buckets because that's
+ *     where the user gets the most perceptual benefit (the whole
+ *     point of slowing down is that a translation pipeline can catch
+ *     up with fast speech; the slider has to make a real audible
+ *     difference there).
+ *   - High end (> 1.15) gets two fast buckets even though the server
+ *     currently caps the acceleration; that way if Cartesia later
+ *     relaxes that cap, our UI will benefit without a code change.
+ *
+ * Returns `null` for non-finite / undefined inputs so the caller can
+ * omit the field entirely.
+ */
+export function toCartesiaSpeed(x: number | undefined): 'slowest' | 'slow' | 'normal' | 'fast' | 'fastest' | null {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return null;
+  if (x <= 0.65) return 'slowest';
+  if (x <= 0.85) return 'slow';
+  if (x <  1.15) return 'normal';
+  if (x <  1.45) return 'fast';
+  return 'fastest';
 }

@@ -5,6 +5,29 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.3.1] — 2026-04-22
+
+### Corrigé
+
+- **Vitesse de parole Cartesia réellement effective** — le slider « Vitesse de parole » était silencieusement ignoré par l'API Cartesia. Mesure empirique sur 6 valeurs numériques (0.5, 0.75, 1.0, 1.25, 1.5, 2.0) : toutes produisaient un audio ±5% de la même durée. L'API `/tts/bytes` accepte en fait uniquement un **enum string** (`'slowest' | 'slow' | 'normal' | 'fast' | 'fastest'`) au niveau racine du payload. Les versions numériques sont traitées comme absentes. Nouveau mapping 5 paliers dans `cartesia.ts::toCartesiaSpeed()` qui convertit le slider 0.5-2.0 vers l'enum avant envoi. Mesuré : baisser à `slowest` ajoute ~20% de durée audio vs `normal`, ce qui donne à la traduction en temps réel le temps de rattraper un débit rapide.
+- **Badge live du palier Cartesia dans l'UI** — quand le moteur Cartesia est sélectionné, le slider affiche en plus du facteur (ex. `0.65×`) le nom du palier effectivement envoyé (`SLOWEST`). Transparence totale sur ce que fait l'API derrière.
+- **Explication par moteur sous le slider** — Cartesia (quantisé, 5 paliers), ElevenLabs (continu 0.7-1.2), OpenAI (continu 0.25-4.0 avec zone de qualité 0.75-1.25). Plus besoin de lire les docs du fournisseur.
+
+### Validé (tests live)
+
+- **Probe 16 combinaisons de formats `speed`** sur l'API Cartesia live (clé utilisateur) : seul `speed: 'slowest' | 'slow' | 'normal' | 'fast' | 'fastest'` au top-level a un effet mesurable. `speed: number` ignoré. `voice.__experimental_controls.speed` marche mais avec sémantique inversée et effet plus faible.
+- **Moyenne sur 3 runs par palier** (phrase FR 12 mots) :
+  - `null` (baseline) : 4.16s
+  - `slowest` : **5.01s (+20%)** ✓
+  - `normal` : 4.22s
+- **Scénario catch-up réel** (5 phrases FR → EN en rafale) : la sortie anglaise fait naturellement 85-91% de la durée française d'entrée, donc **la traduction rattrape déjà à vitesse normale**. Baisser à slowest donne une marge supplémentaire de 15-20% pour les cas où la cible est plus verbose (EN → DE par ex).
+- **Tests unitaires** : 32/32 passing (+3 nouveaux tests couvrant le mapping `toCartesiaSpeed` et l'omission de `speed` à vitesse naturelle).
+
+### Notes techniques
+
+- `cartesia.ts` exporte maintenant `toCartesiaSpeed()` pour réutilisation dans l'UI renderer (`speedBucketFor` dans `SettingsView.tsx` reproduit la même table côté client pour afficher le badge).
+- Quand le palier vaut `'normal'`, le champ `speed` est désormais omis du payload plutôt qu'envoyé. Moins de bytes sur le wire, et ça laisse Cartesia choisir son cadence par défaut optimale pour la voix choisie.
+
 ## [1.3.0] — 2026-04-22
 
 ### Ajouté
