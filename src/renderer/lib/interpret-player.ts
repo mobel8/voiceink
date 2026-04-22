@@ -23,6 +23,19 @@ export interface InterpretPlayerEvents {
   onError?: (err: Error) => void;
 }
 
+export interface InterpretPlayerOptions {
+  /**
+   * Optional audio output device id (as returned by
+   * `navigator.mediaDevices.enumerateDevices()`). When set, playback
+   * is routed to that device via `HTMLAudioElement.setSinkId()`. This
+   * is how we push the translated voice to a virtual microphone
+   * (VB-Cable, VoiceMeeter) for Discord / Zoom / Meet.
+   *
+   * Empty string or undefined = use the system default output.
+   */
+  sinkId?: string;
+}
+
 export class InterpretPlayer {
   private readonly requestId: string;
   private readonly audio: HTMLAudioElement;
@@ -38,7 +51,7 @@ export class InterpretPlayer {
   private readonly fallbackBytes: Uint8Array[] = [];
   private useFallback = false;
 
-  constructor(requestId: string, events: InterpretPlayerEvents = {}) {
+  constructor(requestId: string, events: InterpretPlayerEvents = {}, options: InterpretPlayerOptions = {}) {
     this.requestId = requestId;
     this.events = events;
     this.audio = new Audio();
@@ -54,6 +67,19 @@ export class InterpretPlayer {
     this.audio.onended = () => {
       this.events.onEnd?.();
     };
+
+    // Output device routing (virtual mic, secondary speakers, etc).
+    // setSinkId is only available in Chromium-based engines — Electron
+    // qualifies. Errors are non-fatal: we just fall back to the default
+    // device rather than blocking playback.
+    if (options.sinkId) {
+      const a = this.audio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+      if (typeof a.setSinkId === 'function') {
+        a.setSinkId(options.sinkId).catch((err) => {
+          console.warn('[interpret-player] setSinkId failed:', err?.message || err);
+        });
+      }
+    }
 
     const MIME = 'audio/mpeg';
     if (typeof window !== 'undefined'

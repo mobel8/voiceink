@@ -12,6 +12,7 @@ import type {
   InterpretChunkEvent,
   HistoryEntry,
   UsageStats,
+  VoiceInfo,
 } from '../shared/types';
 
 type ExportFormat = 'json' | 'markdown' | 'txt' | 'csv';
@@ -25,6 +26,9 @@ const IPC = {
   TRANSCRIBE: 'voiceink:transcribe',
   INTERPRET: 'voiceink:interpret',
   ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
+  LIST_VOICES: 'voiceink:listVoices',
+  LISTENER_TRANSCRIBE: 'voiceink:listenerTranscribe',
+  SPEAK: 'voiceink:speak',
   GET_SETTINGS: 'voiceink:getSettings',
   SET_SETTINGS: 'voiceink:setSettings',
   GET_HISTORY: 'voiceink:getHistory',
@@ -74,6 +78,19 @@ const api = {
     ipcRenderer.on(IPC.ON_INTERPRET_CHUNK, listener);
     return () => ipcRenderer.removeListener(IPC.ON_INTERPRET_CHUNK, listener);
   },
+
+  /** Fetch the full voice catalog for the given provider. */
+  listVoices: (provider: 'cartesia' | 'elevenlabs' | 'openai'): Promise<VoiceInfo[]> =>
+    ipcRenderer.invoke(IPC.LIST_VOICES, provider),
+
+  /** Listener — transcribe a single audio segment + optional translate. */
+  listenerTranscribe: (req: { audioBase64: string; mimeType: string; targetLang: string; sourceLang?: string }): Promise<{
+    ok: boolean; text: string; translated?: string; sourceLang?: string; error?: string;
+  }> => ipcRenderer.invoke(IPC.LISTENER_TRANSCRIBE, req),
+
+  /** Text-to-speech only — streams MP3 chunks via onInterpretChunk. */
+  speak: (req: { requestId: string; text: string; language?: string }): Promise<{ ok: boolean; ttfbMs?: number; error?: string; requestId: string }> =>
+    ipcRenderer.invoke(IPC.SPEAK, req),
 
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IPC.GET_HISTORY),
   deleteHistory: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DELETE_HISTORY, id),

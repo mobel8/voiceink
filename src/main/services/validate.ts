@@ -134,6 +134,10 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     ['density', 16],
     ['interpretTargetLang', 16],
     ['ttsProvider', 32],
+    ['ttsSinkId', 256],
+    ['listenerInputDeviceId', 256],
+    ['listenerTargetLang', 16],
+    ['listenerMode', 16],
   ];
   for (const [k, max] of stringFields) {
     const v = clampString(p[k as string], max);
@@ -153,6 +157,7 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     'soundsEnabled',
     'interpreterEnabled',
     'interpreterContinuous',
+    'listenerEnabled',
   ];
   for (const k of boolFields) {
     if (isBoolean(p[k as string])) (out as any)[k] = p[k as string];
@@ -196,6 +201,10 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
   // Enforce ttsProvider enum.
   if (out.ttsProvider && !['cartesia', 'elevenlabs', 'openai'].includes(out.ttsProvider)) {
     delete out.ttsProvider;
+  }
+  // Enforce listenerMode enum.
+  if (out.listenerMode && out.listenerMode !== 'text' && out.listenerMode !== 'audio') {
+    delete out.listenerMode;
   }
 
   // Enforce the density enum explicitly (several code paths branch on it).

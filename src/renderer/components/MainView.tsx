@@ -6,6 +6,7 @@ import { useContinuousInterpreter } from '../hooks/useContinuousInterpreter';
 import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, INTERPRETER_LANGUAGES } from '../lib/constants';
 import { Mode } from '../../shared/types';
 import { InterpretPlayer } from '../lib/interpret-player';
+import { ListenerPanel } from './ListenerPanel';
 
 export function MainView() {
   const {
@@ -61,7 +62,7 @@ export function MainView() {
           const player = new InterpretPlayer(requestId, {
             onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
             onError: (err) => console.warn('[interpret-player]', err.message),
-          });
+          }, { sinkId: settings.ttsSinkId });
           playerRef.current = player;
           const res = await window.voiceink.interpret({
             requestId,
@@ -130,6 +131,7 @@ export function MainView() {
   const continuous = useContinuousInterpreter({
     targetLang: () => settings.interpretTargetLang || 'en',
     sourceLang: () => (settings.language === 'auto' ? undefined : settings.language),
+    sinkId: () => settings.ttsSinkId || undefined,
     onLevel: (rms) => setAudioLevel(rms),
     onPhraseStart: () => {
       // On passe en 'processing' pour que l'UI reflète l'activité TTS
@@ -387,6 +389,11 @@ export function MainView() {
             {lastTranscript || <span className="text-white/30">Votre transcription apparaîtra ici…</span>}
           </div>
         </div>
+
+        {/* Listener panel — renders only when enabled in Settings. */}
+        {settings.listenerEnabled && (
+          <ListenerPanel variant="inline" />
+        )}
       </div>
     </div>
   );

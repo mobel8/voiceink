@@ -1,11 +1,12 @@
 import { ipcMain, clipboard, app, dialog, BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { writeFile } from 'fs/promises';
-import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings } from '../shared/types';
+import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings, VoiceInfo, TTSProvider } from '../shared/types';
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
 import { postProcess, translateText } from './engines/llm';
 import { streamTTS } from './engines/tts';
+import { listVoices } from './engines/tts/catalog';
 import {
   listHistory,
   addHistory,
@@ -319,6 +320,125 @@ export function registerIpc(): void {
         durationMs: Date.now() - t0,
         error: msg,
       };
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // LIST_VOICES — fetch the live voice catalog from a TTS provider so
+  // the Settings UI can render a filterable picker with every available
+  // voice (~100 from Cartesia, 30+ premade ElevenLabs, 11 OpenAI).
+  //
+  // The renderer caches the list client-side for 1h per provider, so
+  // this handler is called rarely (on Settings mount + manual refresh).
+  // -------------------------------------------------------------------
+  ipcMain.handle(IPC.LIST_VOICES, async (_e, providerRaw: unknown): Promise<VoiceInfo[]> => {
+    const provider = (typeof providerRaw === 'string' ? providerRaw : '') as TTSProvider;
+    if (!['cartesia', 'elevenlabs', 'openai'].includes(provider)) {
+      return [];
+    }
+    const settings = getSettings();
+    const apiKey = settings.ttsApiKey?.[provider] || '';
+    try {
+      const list = await listVoices(provider, apiKey);
+      console.log(`[voices] ${provider}: ${list.length} voices`);
+      return list;
+    } catch (err: any) {
+      console.error(`[voices] ${provider} error:`, err?.message || err);
+      return [];
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // SPEAK — simple text-to-speech bypassing Whisper. Streams MP3 chunks
+  // on the same IPC.ON_INTERPRET_CHUNK channel so the renderer can
+  // reuse the existing InterpretPlayer. Used by the Listener's audio
+  // mode (the text is already in the target language so we just need
+  // voice synthesis).
+  // -------------------------------------------------------------------
+  ipcMain.handle(IPC.SPEAK, async (event, rawReq: unknown): Promise<{ ok: boolean; ttfbMs?: number; error?: string; requestId: string }> => {
+    const req = rawReq as { requestId: string; text: string; language?: string };
+    if (!req || !req.requestId || !req.text?.trim()) {
+      return { ok: false, requestId: req?.requestId || '', error: 'invalid request' };
+    }
+    const sender = event.sender;
+    const send = (payload: InterpretChunkEvent) => {
+      if (!sender.isDestroyed()) sender.send(IPC.ON_INTERPRET_CHUNK, payload);
+    };
+    let seq = 0;
+    let ttfbMs: number | undefined;
+    try {
+      const settings = getSettings();
+      const t0 = Date.now();
+      const iter = streamTTS(settings, req.text, { language: req.language });
+      for await (const { chunk, mime } of iter) {
+        if (ttfbMs === undefined) ttfbMs = Date.now() - t0;
+        send({
+          requestId: req.requestId,
+          seq: seq++,
+          chunkBase64: chunk.toString('base64'),
+          mime,
+          done: false,
+        });
+      }
+      send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
+      return { ok: true, ttfbMs, requestId: req.requestId };
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error('[speak] error:', msg);
+      send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true, error: msg });
+      return { ok: false, error: msg, requestId: req.requestId };
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // LISTENER_TRANSCRIBE — one-shot audio segment → transcription +
+  // optional translation. Called by the listener hook once per VAD
+  // segment. Returns *both* the source transcription and the translated
+  // text so the UI can render side-by-side. If listenerMode='audio',
+  // the renderer itself kicks off a TTS playback via IPC.INTERPRET —
+  // no new pipeline needed here, just the text response.
+  // -------------------------------------------------------------------
+  ipcMain.handle(IPC.LISTENER_TRANSCRIBE, async (_e, rawReq: unknown): Promise<{
+    ok: boolean;
+    text: string;
+    translated?: string;
+    sourceLang?: string;
+    error?: string;
+  }> => {
+    try {
+      const req = rawReq as { audioBase64: string; mimeType: string; targetLang: string; sourceLang?: string };
+      if (!req || typeof req.audioBase64 !== 'string' || !req.audioBase64) {
+        return { ok: false, text: '', error: 'invalid request' };
+      }
+      const settings = getSettings();
+      const buf = Buffer.from(req.audioBase64, 'base64');
+      if (buf.length < 500) {
+        return { ok: false, text: '', error: 'audio too short' };
+      }
+      const sourceLangHint = req.sourceLang && req.sourceLang !== 'auto' ? req.sourceLang : '';
+      const whisperSettings = sourceLangHint ? { ...settings, language: sourceLangHint } : settings;
+      const wh = await transcribeWithGroq(buf, req.mimeType, whisperSettings);
+      const text = (settings.replacementsEnabled && settings.replacements?.length)
+        ? applyReplacements(wh.text, settings.replacements)
+        : wh.text;
+      if (!text.trim()) {
+        return { ok: true, text: '', sourceLang: wh.language };
+      }
+      let translated: string | undefined;
+      const tgt = req.targetLang;
+      // Only translate if target differs from detected source.
+      if (tgt && tgt !== wh.language && tgt !== sourceLangHint) {
+        try {
+          translated = await translateText(text, tgt, settings, wh.language);
+        } catch (err: any) {
+          console.warn('[listener] translate failed:', err?.message);
+          // Graceful degradation — still return the transcription.
+        }
+      }
+      return { ok: true, text, translated, sourceLang: wh.language };
+    } catch (err: any) {
+      console.error('[listener] error:', err?.message || err);
+      return { ok: false, text: '', error: err?.message || String(err) };
     }
   });
 }

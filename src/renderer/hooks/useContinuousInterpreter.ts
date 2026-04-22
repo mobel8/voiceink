@@ -28,6 +28,8 @@ export interface ContinuousInterpreterOptions {
   targetLang: () => string;
   /** Source language hint (or empty for auto-detect). */
   sourceLang: () => string | undefined;
+  /** Output device id for the TTS player. Read on each phrase. */
+  sinkId?: () => string | undefined;
   /** Called when a new live RMS sample arrives (0..1), for waveform UI. */
   onLevel?: (rms: number) => void;
   /** Fired when a new phrase is detected and TTS audio starts playing. */
@@ -124,7 +126,7 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
         if (i >= 0) playerQueueRef.current.splice(i, 1);
       },
       onError: (err) => optsRef.current.onError?.(err),
-    });
+    }, { sinkId: optsRef.current.sinkId?.() });
     playerQueueRef.current.push(player);
     optsRef.current.onPhraseStart?.({ requestId });
     try {

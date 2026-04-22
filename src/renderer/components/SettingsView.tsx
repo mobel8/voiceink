@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES } from '../lib/constants';
 import { Settings, TTSProvider } from '../../shared/types';
 import { AppearanceSection } from './AppearanceSection';
 import { ReplacementsSection } from './ReplacementsSection';
+import { VoicePicker } from './VoicePicker';
+import { AudioDevicePicker } from './AudioDevicePicker';
 
 export function SettingsView() {
   const { settings, updateSettings } = useStore();
@@ -555,35 +557,31 @@ function InterpreterSection() {
             </div>
           </div>
 
-          {/* Voice picker */}
+          {/* Voice picker — full catalog with search + filters */}
           <div>
             <div className="label mb-2">Voix ({provider.label})</div>
-            <select
-              className="select"
-              value={isCurated ? currentVoiceId : '__custom__'}
-              onChange={(e) => {
-                if (e.target.value === '__custom__') {
-                  setVoice('');
-                } else {
-                  setVoice(e.target.value);
-                }
-              }}
-            >
-              {provider.voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} — {v.langs}
-                </option>
-              ))}
-              <option value="__custom__">Voice ID personnalisé…</option>
-            </select>
-            {!isCurated && (
+            <VoicePicker
+              provider={providerId}
+              apiKey={currentApiKey}
+              value={currentVoiceId}
+              onChange={setVoice}
+              fallback={provider.voices.map((v) => ({
+                id: v.id,
+                name: v.name,
+                description: v.langs,
+              }))}
+            />
+            <div className="mt-2">
               <input
-                className="input font-mono mt-2"
-                placeholder={`${provider.id} voice id…`}
+                className="input font-mono text-xs"
+                placeholder="ID personnalisé (voix clonée, lab voice…)"
                 value={currentVoiceId}
                 onChange={(e) => setVoice(e.target.value.trim())}
               />
-            )}
+              <p className="text-[11px] text-white/40 mt-1">
+                Collez ici un UUID si vous utilisez une voix clonée via l'API du fournisseur.
+              </p>
+            </div>
           </div>
 
           {/* API key for the selected provider */}
@@ -643,6 +641,20 @@ function InterpreterSection() {
             </div>
           </div>
 
+          {/* Audio output routing — virtual mic for Discord / Zoom / Meet */}
+          <div className="pt-2 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Speaker size={14} className="text-emerald-300" />
+              <div className="label m-0">Sortie audio de la voix traduite</div>
+            </div>
+            <AudioDevicePicker
+              kind="audiooutput"
+              value={settings.ttsSinkId || ''}
+              onChange={(id: string) => save({ ttsSinkId: id })}
+              hint="Pour renvoyer la voix traduite vers Discord/Zoom/Meet comme un micro virtuel, sélectionnez votre périphérique VB-Cable, VoiceMeeter ou OBS Virtual Audio. Laissez sur défaut pour écouter dans vos haut-parleurs."
+            />
+          </div>
+
           {/* Continuous / simultaneous interpretation */}
           <div className="pt-2 border-t border-white/5">
             <ToggleRow
@@ -655,6 +667,97 @@ function InterpreterSection() {
           </div>
         </div>
       )}
+
+      {/* ───── Listener (inbound conversation) ───── */}
+      <div className="pt-4 border-t border-white/10 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Headphones size={16} className="text-sky-300" />
+            <h3 className="font-semibold text-base">Écouter une conversation</h3>
+            <span className="badge" style={{ borderColor: 'rgba(125,211,252,0.4)', color: '#7dd3fc' }}>
+              Beta
+            </span>
+          </div>
+          <Switch
+            value={!!settings.listenerEnabled}
+            onChange={(v) => save({ listenerEnabled: v })}
+          />
+        </div>
+        <p className="text-white/50 text-sm">
+          Transcrit en temps réel ce que dit une autre personne. Choisissez comme source
+          un micro secondaire, ou un périphérique de boucle (VB-Cable Output, Stereo Mix)
+          pour capturer la voix de votre interlocuteur dans un appel Discord/Zoom.
+        </p>
+
+        {settings.listenerEnabled && (
+          <div className="space-y-4 slide-up">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Mic size={13} className="text-sky-300" />
+                <div className="label m-0">Source audio à écouter</div>
+              </div>
+              <AudioDevicePicker
+                kind="audioinput"
+                value={settings.listenerInputDeviceId || ''}
+                onChange={(id: string) => save({ listenerInputDeviceId: id })}
+                hint="Installez VB-Cable (gratuit) et réglez Discord/Zoom pour sortir sur « CABLE Input », puis choisissez ici « CABLE Output » — la voix de votre interlocuteur sera transcrite en direct."
+              />
+            </div>
+
+            <div>
+              <div className="label mb-2">Traduire vers</div>
+              <select
+                className="select"
+                value={settings.listenerTargetLang || 'fr'}
+                onChange={(e) => save({ listenerTargetLang: e.target.value })}
+              >
+                {INTERPRETER_LANGUAGES.map((t) => (
+                  <option key={t.code} value={t.code}>→ {t.label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-white/40 mt-2">
+                Si la langue détectée est déjà celle-ci, la traduction est désactivée
+                automatiquement pour économiser Groq.
+              </p>
+            </div>
+
+            <div>
+              <div className="label mb-2">Mode de restitution</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(['text', 'audio'] as const).map((m) => {
+                  const active = (settings.listenerMode || 'text') === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => save({ listenerMode: m })}
+                      className="glass rounded-xl p-3 text-left transition"
+                      style={{
+                        borderColor: active ? 'rgba(125,211,252,0.5)' : 'rgba(255,255,255,0.08)',
+                        background: active ? 'rgba(125,211,252,0.08)' : 'transparent',
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        {m === 'text' ? <Book size={12} className={active ? 'text-sky-300' : 'text-white/40'} /> :
+                                        <Volume2 size={12} className={active ? 'text-sky-300' : 'text-white/40'} />}
+                        <span className="font-medium text-sm">
+                          {m === 'text' ? 'Texte uniquement' : 'Texte + audio (TTS)'}
+                        </span>
+                        {active && <Check size={12} className="text-sky-300 ml-auto" />}
+                      </div>
+                      <p className="text-[11px] text-white/50 mt-1">
+                        {m === 'text'
+                          ? 'Affiche seulement la transcription + traduction. Le plus rapide et économique.'
+                          : 'Synthétise aussi la traduction via le moteur TTS choisi ci-dessus.'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

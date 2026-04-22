@@ -5,6 +5,28 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.3.0] — 2026-04-22
+
+### Ajouté
+
+- **Catalogue complet de voix (100+ Cartesia, 11 OpenAI, ElevenLabs live)** — le picker de voix n'est plus limité à une liste curée de 6-8 voix. Il interroge maintenant l'API `/voices` de chaque fournisseur, récupère la liste complète avec métadata (nom, description, langue, genre, accent, tag « Pro »), et la présente dans une UI filtrable : champ de recherche live (match sur nom + description), filtre par langue (15 langues Cartesia incluant en, fr, es, de, ja, ko, ar, hi, pt…), filtre par genre (masculin / féminin / neutre), et bouton d'aperçu audio quand le fournisseur expose une URL de preview. Le catalogue est mis en cache 1 h dans `localStorage`, keyed par clé API — changer de clé invalide automatiquement le cache.
+- **Routing audio virtuel (Discord, Zoom, Meet, OBS)** — nouveau sélecteur « Sortie audio de la voix traduite » dans Paramètres > Traducteur vocal. Pointe vers n'importe quel périphérique audio système (VB-Cable Input, VoiceMeeter, OBS Virtual Audio). Le `InterpretPlayer` utilise `HTMLAudioElement.setSinkId()` pour router la voix IA sur ce device — d'autres applis (Discord, Zoom) captent alors la traduction comme s'il s'agissait de votre vrai micro, en parallèle de votre voix.
+- **Mode Écoute conversation (Listener)** — écoute en temps réel ce que dit **une autre personne** et affiche la transcription + traduction dans un panneau défilant avec auto-scroll et timestamps. Sélecteur d'entrée audio dédié (typiquement un device loopback comme « CABLE Output » pour capturer un appel Discord entrant, ou un micro secondaire). Deux modes : **Texte uniquement** (défaut, lecture rapide, économique) ou **Texte + audio TTS** (la traduction est aussi prononcée via le moteur TTS choisi). Chaque segment peut être copié dans le presse-papiers en un clic. Historique borné à 200 segments pour contenir la mémoire.
+- **Pipeline text-to-speech dédié (`voiceink:speak`)** — nouvel IPC qui bypass Whisper pour synthétiser directement un texte déjà traduit, utilisé par le mode audio du Listener. Reuse les 3 moteurs TTS existants + le routing `setSinkId`.
+- **Catalogue Cartesia validé live** : 100 voix retournées par l'API en une requête, avec 15 langues (en: 30, es: 11, ko: 10, ar: 8, hi: 7, de: 6, tl: 6, fr: 2, …) et 100 % de voix avec métadata de genre (55 féminines, 45 masculines).
+
+### Tests
+
+- **Pipeline full-stack validé** avec vraies clés Groq + Cartesia, 3 scénarios EN↔FR↔ES. TTFB TTS réel mesuré : **162-296 ms** pour la première syllabe synthétisée après la fin de phrase. Latence totale (Whisper + translate + 1er chunk TTS) : 1.6-2.0 s.
+- **Test live des nouveaux IPCs** : 6/6 scénarios PASS (listVoices × 3, streamTTS MP3 × 2, pipeline Cartesia→Whisper→translate Cartesia→Whisper validation avec « Good evening. The package has been delivered to your front door. » → « Bonsoir. Le colis a été livré à votre porte d'entrée. »).
+- **Tests unitaires** restés à 30/30 + pipeline E2E passing, aucune régression.
+
+### Notes techniques
+
+- `HTMLAudioElement.setSinkId()` est une API Chromium-only, non bloquante : si elle échoue (device débranché entre-temps, pas de permission), le player se rabat silencieusement sur la sortie par défaut plutôt que de planter.
+- Le `useListener` hook utilise un VAD plus tolérant que `useContinuousInterpreter` (SPEAK_START=0.025 vs 0.035, SILENCE_END=0.015 vs 0.02) parce que l'audio entrant via VoIP (Discord, Zoom) est souvent plus compressé et plus quiet que l'audio direct du mic local.
+- L'historique Listener est gardé client-side (non persisté, volatile par session) pour éviter de polluer l'historique de dictée. Borné à 200 segments glissants.
+
 ## [1.2.1] — 2026-04-22
 
 ### Corrigé

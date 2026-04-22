@@ -211,6 +211,36 @@ export interface Settings {
    * `speed`), otherwise ignored.
    */
   ttsSpeed: number;
+  /**
+   * Audio output device ID (as returned by MediaDevices.enumerateDevices).
+   * Empty = default speakers. Set to a virtual-mic deviceId (VB-Cable,
+   * VoiceMeeter, Krisp…) to route the translated audio to Discord /
+   * Zoom / Meet as if it were coming from your microphone.
+   */
+  ttsSinkId: string;
+
+  // --- Listener (inbound conversation) ----------------------------------
+  /**
+   * Enable listener mode — captures audio from a device (system loopback
+   * or a secondary mic) and transcribes it in real time so the user can
+   * *understand* someone else in another language. Orthogonal to
+   * interpreter mode.
+   */
+  listenerEnabled: boolean;
+  /**
+   * Audio input device ID used by the listener. Empty = default mic.
+   * Typically set to a loopback device ("Stereo Mix", "VB-Cable
+   * Output") so the listener captures the remote caller's voice rather
+   * than your own mic.
+   */
+  listenerInputDeviceId: string;
+  /** Target language (ISO 639-1) for listener translation. */
+  listenerTargetLang: string;
+  /**
+   * 'text' (default) = only transcribe and display on screen,
+   * 'audio'          = also synthesize TTS of the translation.
+   */
+  listenerMode: 'text' | 'audio';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -260,6 +290,11 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   ttsApiKey: {},
   ttsSpeed: 1.0,
+  ttsSinkId: '',
+  listenerEnabled: false,
+  listenerInputDeviceId: '',
+  listenerTargetLang: 'fr',
+  listenerMode: 'text',
 };
 
 export interface HistoryEntry {
@@ -356,10 +391,53 @@ export interface InterpretChunkEvent {
   error?: string;
 }
 
+/**
+ * Per-provider voice metadata surfaced by the voice catalog IPC so
+ * the UI can render a rich filterable picker instead of a dumb
+ * `<select>`. Shape stays stable across providers; missing fields
+ * degrade gracefully in the picker.
+ */
+export interface VoiceInfo {
+  id: string;
+  name: string;
+  description?: string;
+  language?: string;
+  gender?: 'masculine' | 'feminine' | 'neutral';
+  accent?: string;
+  preview_url?: string;
+  pro?: boolean;
+}
+
+/**
+ * Listener mode types — real-time transcription of incoming audio
+ * (another person's voice, system loopback, etc.) with optional
+ * on-the-fly translation. Designed for conversation scenarios where
+ * the user wants to *understand* someone else in another language.
+ */
+export interface ListenerSegment {
+  /** Monotonically increasing id, used for React keys and ordering. */
+  id: string;
+  /** Timestamp (epoch ms) when the segment was captured. */
+  ts: number;
+  /** Detected source language, ISO code. */
+  sourceLang?: string;
+  /** Raw transcription in the source language. */
+  text: string;
+  /** Translated text in target language (same as text if sourceLang === targetLang). */
+  translated?: string;
+  /** Duration of the captured audio in ms. */
+  audioMs: number;
+  /** True while the main process is still synthesizing TTS for this segment. */
+  speaking?: boolean;
+}
+
 export const IPC = {
   TRANSCRIBE: 'voiceink:transcribe',
   INTERPRET: 'voiceink:interpret',
   ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
+  LIST_VOICES: 'voiceink:listVoices',
+  LISTENER_TRANSCRIBE: 'voiceink:listenerTranscribe',
+  SPEAK: 'voiceink:speak',
   GET_SETTINGS: 'voiceink:getSettings',
   SET_SETTINGS: 'voiceink:setSettings',
   GET_HISTORY: 'voiceink:getHistory',
