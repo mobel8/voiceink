@@ -5,6 +5,27 @@ Toutes les modifications notables de VoiceInk sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.2.0] — 2026-04-22
+
+### Ajouté
+- **Traducteur vocal (interprète)** — nouveau mode indépendant des 4 modes de dictée classiques. Parlez dans votre langue, VoiceInk transcrit, traduit et **prononce instantanément** le résultat avec une voix IA réaliste. Le pipeline streame les chunks audio MP3 dès les premiers octets (TTFB ~40–200 ms selon le moteur), sans attendre la synthèse complète.
+  - **Toggle indépendant** dans la barre du MainView (chip vert « Interprète vocal »), à côté du picker de mode. Activable en un clic, la langue cible se choisit dans la même chip. Les 4 modes de dictée `raw / natural / formal / message` continuent de fonctionner quand l'interprète est désactivé.
+  - **Section dédiée dans Paramètres** (« Traducteur vocal »), avec choix du moteur, choix de la voix (liste curée + ID personnalisé pour voix clonées), clé API stockée par moteur, slider de vitesse de parole (0.5×–2.0×).
+- **3 moteurs TTS interchangeables**, chacun en streaming HTTP/WebSocket pour minimiser la latence perçue :
+  - **Cartesia Sonic-2** (par défaut) — WebSocket, TTFB ~40 ms, ~$0.015/1k caractères, voix multilingues réalistes. Obtenir la clé : [play.cartesia.ai/keys](https://play.cartesia.ai/keys).
+  - **ElevenLabs Flash v2.5** — HTTP chunked, TTFB ~75 ms, voix studio quasi indistinguables d'humaines, 32 langues. Obtenir la clé : [elevenlabs.io/app/settings/api-keys](https://elevenlabs.io/app/settings/api-keys).
+  - **OpenAI gpt-4o-mini-tts** — HTTP chunked, 50+ langues, très économique. Obtenir la clé : [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+- **Mode interprète simultané (niveau 2, beta)** — activable depuis Paramètres. Le microphone est écouté en continu ; un détecteur d'activité vocale (VAD via WebAudio `AnalyserNode`) découpe la parole en phrases à chaque pause ≥ 600 ms et envoie chaque phrase en parallèle dans le pipeline. Résultat : la voix traduite commence à parler **pendant que vous êtes encore en train de dicter**, façon interprète ONU. Bouton « LIVE » rouge affiché quand actif.
+- **Lecture audio incrémentale** — nouveau `InterpretPlayer` côté renderer : assemble les chunks MP3 via `MediaSource` + `SourceBuffer`, la lecture démarre dès le premier chunk reçu sans attendre la fin de la synthèse. Fallback automatique sur blob-URL si MediaSource n'est pas supporté.
+- **34 tests automatisés** (30 unitaires / E2E `scripts/_test-interpreter.js` + pipeline complet `scripts/_test-ipc-interpret.js`) couvrant : defaults de `Settings`, constantes IPC, sanitiseur, les 3 providers contre des mocks HTTP/WS locaux, le `AbortSignal`, et un pipeline end-to-end Whisper → Translate → TTS avec 4 chunks streamés (TTFB ~30 ms en local).
+
+### Modifié
+- `src/shared/types.ts` étendu avec `interpreterEnabled`, `interpretTargetLang`, `interpreterContinuous`, `ttsProvider`, `ttsVoiceId` (keyed par provider), `ttsApiKey` (keyed par provider), `ttsSpeed`. Nouveaux types `InterpretRequest`, `InterpretResponse`, `InterpretChunkEvent`. Nouveaux IDs IPC `INTERPRET` et `ON_INTERPRET_CHUNK`.
+- Dépendance ajoutée : `ws@^8.18.0` (client WebSocket pour Cartesia) + `@types/ws` en dev.
+- `src/main/services/validate.ts` gagne `validateInterpretRequest` et un sanitiseur étendu pour les nouveaux champs (clamping `ttsSpeed` 0.25–4.0, enum `ttsProvider`, drop des clés de provider inconnues).
+- `src/main/ipc.ts` gagne le handler `voiceink:interpret` qui orchestre Whisper → translate → streamTTS avec mesure `ttfbMs` loggée dans `runtime.log`.
+- `src/main/preload.ts` expose `interpret()` et `onInterpretChunk()`.
+
 ## [1.1.3] — 2026-04-21
 
 ### Corrigé

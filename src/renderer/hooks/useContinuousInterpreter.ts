@@ -1,0 +1,294 @@
+// Continuous interpreter hook — Voice Activity Detection (VAD)
+// pipeline for the "simultaneous interpretation" mode.
+//
+// High-level flow:
+//   1. Open a single MediaStream + AudioContext with an AnalyserNode
+//      that samples the microphone RMS every ~30 ms.
+//   2. A simple state machine tracks speaking vs. silent:
+//        - RMS > speakStart threshold → start a MediaRecorder, open a
+//          new "phrase" window.
+//        - RMS < silenceEnd threshold for `silenceHoldMs` consecutive
+//          ms → stop the MediaRecorder, ship the WebM blob off to the
+//          `interpret` IPC, then get ready for the next phrase.
+//   3. Each phrase feeds its own `InterpretPlayer`, and we maintain a
+//      FIFO queue of players so the OUTPUT audio plays in the order
+//      the user spoke, even when longer phrases take longer to
+//      translate.
+//
+// The thresholds are deliberately conservative — we'd rather keep a
+// tiny bit of silence at the ends than clip the beginning of a word.
+// Users can later tune them from SettingsView if needed.
+
+import { useCallback, useEffect, useRef } from 'react';
+import { InterpretPlayer } from '../lib/interpret-player';
+import type { InterpretChunkEvent, InterpretResponse } from '../../shared/types';
+
+export interface ContinuousInterpreterOptions {
+  /** Target language (ISO 639-1). Read every time a phrase is shipped. */
+  targetLang: () => string;
+  /** Source language hint (or empty for auto-detect). */
+  sourceLang: () => string | undefined;
+  /** Called when a new live RMS sample arrives (0..1), for waveform UI. */
+  onLevel?: (rms: number) => void;
+  /** Fired when a new phrase is detected and TTS audio starts playing. */
+  onPhraseStart?: (meta: { requestId: string }) => void;
+  /** Fired when a phrase round-trip completes with metadata. */
+  onPhraseDone?: (res: InterpretResponse) => void;
+  /** Fired on any hard error (permission denied, stream broken, TTS…). */
+  onError?: (err: Error) => void;
+}
+
+export interface ContinuousInterpreterHandle {
+  start: () => Promise<void>;
+  stop: () => void;
+  isActive: () => boolean;
+}
+
+// Tunables. Refined empirically — hold short enough for snappy
+// interpretation (~500 ms feels "live"), RMS gap loose enough to
+// tolerate soft speakers.
+const SPEAK_START_RMS = 0.035;
+const SILENCE_END_RMS = 0.02;
+const SILENCE_HOLD_MS = 600;
+/** Minimum phrase length before we bother shipping it — avoids firing
+ *  interpret for 'ah' or a single clipped consonant. */
+const MIN_PHRASE_MS = 400;
+/** Hard cap on a single phrase, to protect API limits and avoid huge
+ *  latency spikes on monologues. 18 s covers most sentences. */
+const MAX_PHRASE_MS = 18000;
+
+export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): ContinuousInterpreterHandle {
+  const streamRef = useRef<MediaStream | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const mimeRef = useRef<string>('audio/webm');
+  const phraseStartAtRef = useRef<number>(0);
+  const silenceSinceRef = useRef<number>(0);
+  const activeRef = useRef<boolean>(false);
+  const stoppingForShipRef = useRef<boolean>(false);
+
+  /** FIFO of players we're currently playing (in speaking order). */
+  const playerQueueRef = useRef<InterpretPlayer[]>([]);
+  const unsubChunkRef = useRef<null | (() => void)>(null);
+
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+
+  // Wire the single chunk listener. Each chunk's requestId routes to
+  // its own player — we hold the map in playerQueueRef and dispatch
+  // by requestId match.
+  useEffect(() => {
+    const api = (window as any).voiceink;
+    if (!api?.onInterpretChunk) return;
+    const unsub = api.onInterpretChunk((evt: InterpretChunkEvent) => {
+      // Route to the matching player. Slow lookup but the queue is
+      // short (usually < 3 active players).
+      for (const p of playerQueueRef.current) {
+        // InterpretPlayer ignores chunks for other requestIds, so
+        // we can push to every player — but better to route explicitly.
+        p.push(evt);
+      }
+    });
+    unsubChunkRef.current = unsub;
+    return () => {
+      try { unsub?.(); } catch { /* ignore */ }
+      unsubChunkRef.current = null;
+    };
+  }, []);
+
+  const shipCurrentPhrase = useCallback((reason: 'silence' | 'cap' | 'force') => {
+    const rec = recorderRef.current;
+    if (!rec || rec.state !== 'recording') return;
+    const phraseMs = Date.now() - phraseStartAtRef.current;
+    if (phraseMs < MIN_PHRASE_MS && reason === 'silence') {
+      // Too short — drop and start fresh next time speech is detected.
+      try { rec.stop(); } catch { /* ignore */ }
+      recorderRef.current = null;
+      chunksRef.current = [];
+      return;
+    }
+    stoppingForShipRef.current = true;
+    try { rec.stop(); } catch { /* ignore */ }
+  }, []);
+
+  const shipBlob = useCallback(async (blob: Blob, mimeType: string) => {
+    const requestId = `intc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const player = new InterpretPlayer(requestId, {
+      onEnd: () => {
+        // Remove from queue when playback ends.
+        const i = playerQueueRef.current.indexOf(player);
+        if (i >= 0) playerQueueRef.current.splice(i, 1);
+      },
+      onError: (err) => optsRef.current.onError?.(err),
+    });
+    playerQueueRef.current.push(player);
+    optsRef.current.onPhraseStart?.({ requestId });
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const api = (window as any).voiceink;
+      const res = await api.interpret({
+        requestId,
+        audioBase64,
+        mimeType,
+        sourceLang: optsRef.current.sourceLang(),
+        targetLang: optsRef.current.targetLang(),
+      });
+      optsRef.current.onPhraseDone?.(res);
+      if (!res.ok) {
+        // Surface error, tear down this player.
+        optsRef.current.onError?.(new Error(res.error || 'Interpret failed'));
+        player.dispose();
+        const i = playerQueueRef.current.indexOf(player);
+        if (i >= 0) playerQueueRef.current.splice(i, 1);
+      }
+    } catch (err: any) {
+      optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
+      player.dispose();
+    }
+  }, []);
+
+  const openRecorder = useCallback(() => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+    ];
+    let mime = '';
+    for (const c of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) { mime = c; break; }
+    }
+    mimeRef.current = mime || 'audio/webm';
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined);
+    chunksRef.current = [];
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      const type = mimeRef.current.split(';')[0] || 'audio/webm';
+      const blob = new Blob(chunksRef.current, { type });
+      chunksRef.current = [];
+      recorderRef.current = null;
+      if (stoppingForShipRef.current && blob.size > 1000) {
+        stoppingForShipRef.current = false;
+        shipBlob(blob, type);
+      }
+      stoppingForShipRef.current = false;
+    };
+    recorderRef.current = rec;
+    phraseStartAtRef.current = Date.now();
+    silenceSinceRef.current = 0;
+    rec.start(100);
+  }, [shipBlob]);
+
+  const start = useCallback(async () => {
+    if (activeRef.current) return;
+    activeRef.current = true;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+    streamRef.current = stream;
+
+    const ctx = new AudioContext();
+    ctxRef.current = ctx;
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.3;
+    src.connect(analyser);
+    analyserRef.current = analyser;
+
+    const buf = new Uint8Array(analyser.fftSize);
+    const tick = () => {
+      if (!activeRef.current || !analyserRef.current) return;
+      analyserRef.current.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      optsRef.current.onLevel?.(Math.min(1, rms * 2.5));
+      const now = Date.now();
+
+      const rec = recorderRef.current;
+      const isRecording = !!rec && rec.state === 'recording';
+
+      if (!isRecording) {
+        if (rms > SPEAK_START_RMS) {
+          openRecorder();
+        }
+      } else {
+        // Inside a phrase — track silence.
+        if (rms < SILENCE_END_RMS) {
+          if (silenceSinceRef.current === 0) silenceSinceRef.current = now;
+          if (now - silenceSinceRef.current >= SILENCE_HOLD_MS) {
+            shipCurrentPhrase('silence');
+          }
+        } else {
+          silenceSinceRef.current = 0;
+        }
+        // Hard cap.
+        if (now - phraseStartAtRef.current >= MAX_PHRASE_MS) {
+          shipCurrentPhrase('cap');
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    tick();
+  }, [openRecorder, shipCurrentPhrase]);
+
+  const stop = useCallback(() => {
+    activeRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    // Ship any phrase still in progress so the user doesn't lose audio.
+    const rec = recorderRef.current;
+    if (rec && rec.state === 'recording') {
+      const phraseMs = Date.now() - phraseStartAtRef.current;
+      if (phraseMs >= MIN_PHRASE_MS) {
+        stoppingForShipRef.current = true;
+      }
+      try { rec.stop(); } catch { /* ignore */ }
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (ctxRef.current) {
+      try { ctxRef.current.close(); } catch { /* ignore */ }
+      ctxRef.current = null;
+    }
+    analyserRef.current = null;
+  }, []);
+
+  // Tidy up on unmount.
+  useEffect(() => () => stop(), [stop]);
+
+  const isActive = useCallback(() => activeRef.current, []);
+
+  return { start, stop, isActive };
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = String(reader.result || '');
+      const comma = s.indexOf(',');
+      resolve(comma >= 0 ? s.slice(comma + 1) : s);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}

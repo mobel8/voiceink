@@ -88,3 +88,79 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   ru: 'Russian', ja: 'Japanese', zh: 'Chinese', ko: 'Korean',
   ar: 'Arabic',
 };
+
+/**
+ * TTS provider catalog. Each provider declares:
+ *   - `label` / `desc` : localised marketing copy.
+ *   - `keyUrl`         : where the user gets their API key.
+ *   - `voices`         : list of {id, name, langs} for the picker. We
+ *                        ship a short curated list — power users can
+ *                        paste a custom voice id in the input next to
+ *                        the picker.
+ */
+export const TTS_PROVIDERS: Array<{
+  id: 'cartesia' | 'elevenlabs' | 'openai';
+  label: string;
+  desc: string;
+  keyUrl: string;
+  voices: Array<{ id: string; name: string; langs: string }>;
+}> = [
+  {
+    id: 'cartesia',
+    label: 'Cartesia Sonic-2',
+    desc: 'Ultra-rapide (~40 ms TTFB), voix réalistes, très économique.',
+    keyUrl: 'https://play.cartesia.ai/keys',
+    voices: [
+      { id: '794f9389-aac1-45b6-b726-9d9369183238', name: 'Professional Woman', langs: 'multi' },
+      { id: 'a0e99841-438c-4a64-b679-ae501e7d6091', name: 'Barbershop Man',     langs: 'en, fr' },
+      { id: '156fb8d2-335b-4950-9cb3-a2d33befec77', name: 'Help Desk Man',      langs: 'en, fr, es' },
+      { id: '2ee87190-8f84-4925-97da-e52547f9462c', name: 'Child',              langs: 'multi' },
+      { id: '87748186-23bb-4158-a1eb-332911b0b708', name: 'British Lady',       langs: 'en' },
+      { id: 'a3788b92-e7be-4c37-9927-3c0e5e9f8d6d', name: 'Friendly French Man', langs: 'fr' },
+      { id: '65b25c5d-ff07-4687-a04c-da2f43ef6fa9', name: 'French Man',          langs: 'fr' },
+    ],
+  },
+  {
+    id: 'elevenlabs',
+    label: 'ElevenLabs Flash v2.5',
+    desc: 'Qualité studio, voix quasi humaines, TTFB ~75 ms.',
+    keyUrl: 'https://elevenlabs.io/app/settings/api-keys',
+    voices: [
+      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (F)',   langs: 'multi' },
+      { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (F)',     langs: 'multi' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (F)',    langs: 'multi' },
+      { id: 'pNInz6obpgDQGBFmaJiz', name: 'Adam (M)',     langs: 'multi' },
+      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam (M)',     langs: 'multi' },
+      { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel (M)',   langs: 'multi' },
+      { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte (F)', langs: 'multi' },
+    ],
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI gpt-4o-mini-tts',
+    desc: '50+ langues, très économique, TTFB ~200 ms.',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    voices: [
+      { id: 'alloy',   name: 'Alloy (neutre)',     langs: 'multi' },
+      { id: 'nova',    name: 'Nova (F, chaleureuse)', langs: 'multi' },
+      { id: 'shimmer', name: 'Shimmer (F, douce)',   langs: 'multi' },
+      { id: 'coral',   name: 'Coral (F, expressive)', langs: 'multi' },
+      { id: 'echo',    name: 'Echo (M)',           langs: 'multi' },
+      { id: 'onyx',    name: 'Onyx (M, grave)',    langs: 'multi' },
+      { id: 'fable',   name: 'Fable (M, narratif)', langs: 'multi' },
+      { id: 'ballad',  name: 'Ballad (M)',         langs: 'multi' },
+      { id: 'ash',     name: 'Ash (M)',            langs: 'multi' },
+      { id: 'sage',    name: 'Sage (F)',           langs: 'multi' },
+      { id: 'verse',   name: 'Verse (M)',          langs: 'multi' },
+    ],
+  },
+];
+
+/**
+ * Interpreter target language list. Reuses the same codes as
+ * TRANSLATE_TARGETS but always defaults to a real language (no empty
+ * "none" option — the interpreter needs a target to speak).
+ */
+export const INTERPRETER_LANGUAGES = TRANSLATE_TARGETS
+  .filter((t) => t.code !== '')
+  .map((t) => ({ code: t.code, label: t.native }));

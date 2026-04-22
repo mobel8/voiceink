@@ -1,10 +1,11 @@
 import { ipcMain, clipboard, app, dialog, BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { writeFile } from 'fs/promises';
-import { IPC, TranscribeResponse, Settings } from '../shared/types';
+import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings } from '../shared/types';
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
 import { postProcess, translateText } from './engines/llm';
+import { streamTTS } from './engines/tts';
 import {
   listHistory,
   addHistory,
@@ -21,6 +22,7 @@ import {
   validateHistoryId,
   validateExportFormat,
   validateTranscribeRequest,
+  validateInterpretRequest,
   validateText,
 } from './services/validate';
 
@@ -183,6 +185,139 @@ export function registerIpc(): void {
         finalText: '',
         durationMs: Date.now() - t0,
         error: err?.message || String(err),
+      };
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // INTERPRETER — voice-to-voice translation pipeline.
+  //
+  //   Audio in (Whisper) → translated text (Groq llama) → streamed
+  //   MP3 chunks pushed to the renderer via IPC.ON_INTERPRET_CHUNK.
+  //
+  // The handler returns the final metadata (rawText, translatedText,
+  // ttfbMs) synchronously once the last chunk has been emitted, so the
+  // renderer can show latency stats next to the classic transcribe
+  // ones. Chunks are streamed as soon as they arrive from the TTS
+  // provider — playback begins ~300-800 ms after end-of-audio on a
+  // cold path.
+  // -------------------------------------------------------------------
+  ipcMain.handle(IPC.INTERPRET, async (event, rawReq: unknown): Promise<InterpretResponse> => {
+    const req = validateInterpretRequest(rawReq);
+    if (!req) {
+      return {
+        ok: false, requestId: '', rawText: '', translatedText: '',
+        durationMs: 0, error: 'invalid request',
+      };
+    }
+    const sender = event.sender;
+    const send = (payload: InterpretChunkEvent) => {
+      if (!sender.isDestroyed()) {
+        sender.send(IPC.ON_INTERPRET_CHUNK, payload);
+      }
+    };
+
+    const t0 = Date.now();
+    let seq = 0;
+    let ttfbMs: number | undefined;
+    try {
+      const settings = getSettings();
+      const buf = Buffer.from(req.audioBase64, 'base64');
+      console.log(`[interpret] received audio: ${buf.length} bytes (${req.mimeType}) → ${req.targetLang}`);
+      if (buf.length < 500) {
+        throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
+      }
+
+      // 1) Whisper transcription in the SOURCE language.
+      const t1 = Date.now();
+      const sourceLangHint = req.sourceLang && req.sourceLang !== 'auto' ? req.sourceLang : '';
+      const whisperSettings = sourceLangHint
+        ? { ...settings, language: sourceLangHint }
+        : settings;
+      const r = await transcribeWithGroq(buf, req.mimeType, whisperSettings);
+      console.log(`[interpret] whisper: ${Date.now() - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'})`);
+
+      let rawText = r.text;
+      if (settings.replacementsEnabled !== false && settings.replacements?.length) {
+        rawText = applyReplacements(rawText, settings.replacements);
+      }
+
+      if (!rawText.trim()) {
+        throw new Error('Aucune parole détectée dans l\'audio.');
+      }
+
+      // 2) Translation to the target language — reuse the same
+      //    translateText machinery as the classic pipeline.
+      const t2 = Date.now();
+      const translated = await translateText(rawText, req.targetLang, settings, r.language);
+      console.log(`[interpret] translate → ${req.targetLang}: ${Date.now() - t2}ms`);
+
+      // 3) TTS streaming — forward every MP3 chunk to the renderer as
+      //    soon as it arrives. The `ttfbMs` metric is measured at the
+      //    first chunk so the UI can display the perceived latency.
+      const t3 = Date.now();
+      const ttsIter = streamTTS(settings, translated, { language: req.targetLang });
+      for await (const { chunk, mime } of ttsIter) {
+        if (ttfbMs === undefined) {
+          ttfbMs = Date.now() - t3;
+          console.log(`[interpret] tts first chunk: ${ttfbMs}ms`);
+        }
+        send({
+          requestId: req.requestId,
+          seq: seq++,
+          chunkBase64: chunk.toString('base64'),
+          mime,
+          done: false,
+        });
+      }
+      // Flush sentinel so the renderer can close its MediaSource buffer.
+      send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
+
+      const durationMs = Date.now() - t0;
+      console.log(`[interpret] done: total=${durationMs}ms, ttfb=${ttfbMs}ms, chunks=${seq}`);
+
+      addHistory({
+        id: randomUUID(),
+        createdAt: Date.now(),
+        rawText,
+        finalText: translated,
+        mode: 'raw',
+        language: r.language || req.sourceLang || 'auto',
+        translatedTo: req.targetLang,
+        durationMs,
+        audioMs: 0,
+        tags: ['interpret'],
+        wordCount: wordCount(translated),
+      });
+
+      return {
+        ok: true,
+        requestId: req.requestId,
+        rawText,
+        translatedText: translated,
+        detectedLanguage: r.language,
+        durationMs,
+        ttfbMs,
+      };
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error('[interpret] error:', msg);
+      // Tell the renderer to tear down its player.
+      send({
+        requestId: req.requestId,
+        seq: seq++,
+        chunkBase64: '',
+        mime: 'audio/mpeg',
+        done: true,
+        error: msg,
+      });
+      return {
+        ok: false,
+        requestId: req.requestId,
+        rawText: '',
+        translatedText: '',
+        durationMs: Date.now() - t0,
+        error: msg,
       };
     }
   });

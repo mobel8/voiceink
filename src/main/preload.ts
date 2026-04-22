@@ -7,6 +7,9 @@ import type {
   Settings,
   TranscribeRequest,
   TranscribeResponse,
+  InterpretRequest,
+  InterpretResponse,
+  InterpretChunkEvent,
   HistoryEntry,
   UsageStats,
 } from '../shared/types';
@@ -20,6 +23,8 @@ type ExportFormat = 'json' | 'markdown' | 'txt' | 'csv';
  */
 const IPC = {
   TRANSCRIBE: 'voiceink:transcribe',
+  INTERPRET: 'voiceink:interpret',
+  ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
   GET_SETTINGS: 'voiceink:getSettings',
   SET_SETTINGS: 'voiceink:setSettings',
   GET_HISTORY: 'voiceink:getHistory',
@@ -53,6 +58,22 @@ const api = {
 
   transcribe: (req: TranscribeRequest): Promise<TranscribeResponse> =>
     ipcRenderer.invoke(IPC.TRANSCRIBE, req),
+
+  /**
+   * Voice interpreter — streams translated audio back over
+   * `onInterpretChunk`. The returned Promise resolves with the final
+   * metadata (latency, detected language…) once the last MP3 chunk
+   * has been pushed. The renderer is expected to subscribe to chunks
+   * BEFORE calling this (see `src/renderer/lib/interpret-player.ts`).
+   */
+  interpret: (req: InterpretRequest): Promise<InterpretResponse> =>
+    ipcRenderer.invoke(IPC.INTERPRET, req),
+
+  onInterpretChunk: (cb: (chunk: InterpretChunkEvent) => void) => {
+    const listener = (_e: unknown, chunk: InterpretChunkEvent) => cb(chunk);
+    ipcRenderer.on(IPC.ON_INTERPRET_CHUNK, listener);
+    return () => ipcRenderer.removeListener(IPC.ON_INTERPRET_CHUNK, listener);
+  },
 
   getHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IPC.GET_HISTORY),
   deleteHistory: (id: string): Promise<void> => ipcRenderer.invoke(IPC.DELETE_HISTORY, id),

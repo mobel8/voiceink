@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2 } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS } from '../lib/constants';
-import { Settings } from '../../shared/types';
+import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES } from '../lib/constants';
+import { Settings, TTSProvider } from '../../shared/types';
 import { AppearanceSection } from './AppearanceSection';
 import { ReplacementsSection } from './ReplacementsSection';
 
@@ -102,6 +102,9 @@ export function SettingsView() {
 
       {/* Replacements / custom dictionary */}
       <ReplacementsSection />
+
+      {/* Voice Interpreter */}
+      <InterpreterSection />
 
       {/* Translation */}
       <section className="glass rounded-2xl p-6 space-y-4">
@@ -333,5 +336,213 @@ function ToggleRow({ label, desc, value, onChange, icon }: { label: string; desc
 function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className={`switch ${value ? 'on' : ''}`} onClick={() => onChange(!value)} role="switch" aria-checked={value} />
+  );
+}
+
+/**
+ * Voice interpreter configuration — provider + per-provider voice
+ * + per-provider API key + target language + continuous mode toggle.
+ *
+ * Design notes:
+ *   - The per-provider voice/key state lets the user flip between
+ *     providers without losing their previously-pasted keys. Switching
+ *     ttsProvider just changes what the two inputs below address.
+ *   - The voice picker is a <select> pre-populated with our curated
+ *     shortlist + a "Custom ID…" option that reveals a free-form
+ *     input for advanced users (voice cloning, lab voices, etc.).
+ *   - The continuous toggle is wired but gated behind a "Beta" badge
+ *     because the VAD pipeline ships in the same release and hasn't
+ *     had weeks of field-testing yet.
+ */
+function InterpreterSection() {
+  const { settings, updateSettings } = useStore();
+  const [showTtsKey, setShowTtsKey] = useState(false);
+
+  const providerId = settings.ttsProvider || 'cartesia';
+  const provider = TTS_PROVIDERS.find((p) => p.id === providerId) || TTS_PROVIDERS[0];
+  const currentVoiceId = settings.ttsVoiceId?.[providerId] || provider.voices[0]?.id || '';
+  const currentApiKey = settings.ttsApiKey?.[providerId] || '';
+  const isCurated = provider.voices.some((v) => v.id === currentVoiceId);
+
+  const save = (patch: Partial<Settings>) => updateSettings(patch);
+  const setProvider = (id: TTSProvider) => save({ ttsProvider: id });
+  const setVoice = (voiceId: string) => save({
+    ttsVoiceId: { ...(settings.ttsVoiceId || {}), [providerId]: voiceId },
+  });
+  const setApiKey = (key: string) => save({
+    ttsApiKey: { ...(settings.ttsApiKey || {}), [providerId]: key.trim() },
+  });
+
+  return (
+    <section className="glass rounded-2xl p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Volume2 size={16} className="text-emerald-300" />
+          <h2 className="font-semibold text-lg">Traducteur vocal (interprète)</h2>
+          <span className="badge" style={{ borderColor: 'rgba(16,185,129,0.4)', color: '#6ee7b7' }}>
+            Nouveau
+          </span>
+        </div>
+        <Switch
+          value={!!settings.interpreterEnabled}
+          onChange={(v) => save({ interpreterEnabled: v })}
+        />
+      </div>
+      <p className="text-white/50 text-sm">
+        Parlez dans votre langue — VoiceInk traduit instantanément et prononce le résultat
+        avec une voix IA réaliste. Idéal pour réunions multilingues, appels visio, ou tester
+        une tournure dans une autre langue. Indépendant des 4 modes de dictée classiques.
+      </p>
+
+      {settings.interpreterEnabled && (
+        <div className="space-y-4 slide-up">
+          {/* Target language */}
+          <div>
+            <div className="label mb-2">Langue parlée en sortie</div>
+            <select
+              className="select"
+              value={settings.interpretTargetLang || 'en'}
+              onChange={(e) => save({ interpretTargetLang: e.target.value })}
+            >
+              {INTERPRETER_LANGUAGES.map((t) => (
+                <option key={t.code} value={t.code}>→ {t.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-white/40 mt-2">
+              Si votre dictée est dans une autre langue, Whisper la détecte automatiquement
+              avant traduction.
+            </p>
+          </div>
+
+          {/* Provider picker */}
+          <div>
+            <div className="label mb-2">Moteur de voix</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {TTS_PROVIDERS.map((p) => {
+                const active = p.id === providerId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setProvider(p.id)}
+                    className="glass rounded-xl p-3 text-left transition"
+                    style={{
+                      borderColor: active ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.08)',
+                      background: active ? 'rgba(16,185,129,0.08)' : 'transparent',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap size={12} className={active ? 'text-emerald-300' : 'text-white/40'} />
+                      <span className="font-medium text-sm">{p.label}</span>
+                      {active && <Check size={12} className="text-emerald-300 ml-auto" />}
+                    </div>
+                    <p className="text-[11px] text-white/50 mt-1">{p.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Voice picker */}
+          <div>
+            <div className="label mb-2">Voix ({provider.label})</div>
+            <select
+              className="select"
+              value={isCurated ? currentVoiceId : '__custom__'}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setVoice('');
+                } else {
+                  setVoice(e.target.value);
+                }
+              }}
+            >
+              {provider.voices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} — {v.langs}
+                </option>
+              ))}
+              <option value="__custom__">Voice ID personnalisé…</option>
+            </select>
+            {!isCurated && (
+              <input
+                className="input font-mono mt-2"
+                placeholder={`${provider.id} voice id…`}
+                value={currentVoiceId}
+                onChange={(e) => setVoice(e.target.value.trim())}
+              />
+            )}
+          </div>
+
+          {/* API key for the selected provider */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="label">Clé API {provider.label}</div>
+              <a
+                href={provider.keyUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-300 hover:text-emerald-200 inline-flex items-center gap-1"
+              >
+                Obtenir une clé <ExternalLink size={12} />
+              </a>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type={showTtsKey ? 'text' : 'password'}
+                className="input font-mono"
+                placeholder={providerId === 'cartesia' ? 'sk_car_...' :
+                             providerId === 'elevenlabs' ? 'xi-api-key (sk_...)' :
+                             'sk-...'}
+                value={currentApiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+              <button className="btn btn-ghost" onClick={() => setShowTtsKey(!showTtsKey)}>
+                {showTtsKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+            <p className="text-[11px] text-white/40 mt-2">
+              Stockée localement, une clé par fournisseur. Basculer de moteur
+              conserve les clés déjà saisies.
+            </p>
+          </div>
+
+          {/* Speed */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="label">Vitesse de parole</div>
+              <span className="text-xs text-white/60 font-mono">
+                {(settings.ttsSpeed ?? 1.0).toFixed(2)}×
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0.5}
+              max={2.0}
+              step={0.05}
+              value={settings.ttsSpeed ?? 1.0}
+              onChange={(e) => save({ ttsSpeed: parseFloat(e.target.value) })}
+              className="w-full"
+            />
+            <div className="flex justify-between text-[10px] text-white/30 mt-1">
+              <span>0.5× (lent)</span>
+              <span>1.0× (naturel)</span>
+              <span>2.0× (rapide)</span>
+            </div>
+          </div>
+
+          {/* Continuous / simultaneous interpretation */}
+          <div className="pt-2 border-t border-white/5">
+            <ToggleRow
+              label="Mode interprète simultané (beta)"
+              desc="Découpe l'audio par phrases (VAD) : la voix traduite commence à parler pendant que vous êtes encore en train de dicter. Augmente légèrement la consommation d'API."
+              icon={<Zap size={14} />}
+              value={!!settings.interpreterContinuous}
+              onChange={(v) => save({ interpreterContinuous: v })}
+            />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

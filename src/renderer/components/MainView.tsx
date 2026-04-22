@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Globe } from 'lucide-react';
+import { Mic, Square, Loader2, Copy, Check, ClipboardPaste, AlertCircle, Zap, Key, ArrowRight, Languages, Globe, Volume2, Radio } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
-import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS } from '../lib/constants';
+import { useContinuousInterpreter } from '../hooks/useContinuousInterpreter';
+import { MODE_LABELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, INTERPRETER_LANGUAGES } from '../lib/constants';
 import { Mode } from '../../shared/types';
+import { InterpretPlayer } from '../lib/interpret-player';
 
 export function MainView() {
   const {
@@ -19,6 +21,26 @@ export function MainView() {
   const hasKey = !!settings.groqApiKey;
 
   const [copied, setCopied] = useState(false);
+  // TTFB stats for the interpreter. Rendered as a small badge when
+  // the last session produced audio.
+  const [lastTtfbMs, setLastTtfbMs] = useState(0);
+  // Active MediaSource-backed audio player (interpreter only). Lives
+  // across renders via ref so component unmount cleans it up.
+  const playerRef = useRef<InterpretPlayer | null>(null);
+  // Subscription to main-process chunk events. Installed once, routed
+  // to the active player by requestId.
+  useEffect(() => {
+    const api = (window as any).voiceink;
+    if (!api?.onInterpretChunk) return;
+    const unsub = api.onInterpretChunk((chunk: any) => {
+      playerRef.current?.push(chunk);
+    });
+    return () => {
+      try { unsub?.(); } catch { /* ignore */ }
+      playerRef.current?.dispose();
+      playerRef.current = null;
+    };
+  }, []);
 
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
@@ -28,6 +50,41 @@ export function MainView() {
       const t0 = Date.now();
       try {
         const audioBase64 = await blobToBase64(blob);
+
+        // ----- Interpreter path ---------------------------------------------
+        // When the toggle is ON, route through the voice-to-voice
+        // pipeline instead of the classic dictation pipeline.
+        if (settings.interpreterEnabled) {
+          playerRef.current?.dispose();
+          const requestId = `int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const targetLang = settings.interpretTargetLang || 'en';
+          const player = new InterpretPlayer(requestId, {
+            onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
+            onError: (err) => console.warn('[interpret-player]', err.message),
+          });
+          playerRef.current = player;
+          const res = await window.voiceink.interpret({
+            requestId,
+            audioBase64,
+            mimeType,
+            sourceLang: settings.language === 'auto' ? undefined : settings.language,
+            targetLang,
+          });
+          setLastLatencyMs(Date.now() - t0);
+          if (!res.ok) {
+            setLastError(res.error || 'Erreur inconnue');
+            setRecState('error');
+            return;
+          }
+          setLastTranscript(`${res.rawText}\n\n→ ${res.translatedText}`);
+          setRecState('idle');
+          setLastError('');
+          if (typeof res.ttfbMs === 'number') setLastTtfbMs(res.ttfbMs);
+          loadHistory();
+          return;
+        }
+
+        // ----- Classic dictation path ---------------------------------------
         const res = await window.voiceink.transcribe({
           audioBase64,
           mimeType,
@@ -67,8 +124,58 @@ export function MainView() {
   const recStateRef = useRef(recState);
   recStateRef.current = recState;
 
+  // Continuous interpreter (niveau 2 : VAD simultané). Active quand
+  // `interpreterEnabled && interpreterContinuous`. Le hook capte en
+  // permanence et fire `interpret()` à chaque fin de phrase détectée.
+  const continuous = useContinuousInterpreter({
+    targetLang: () => settings.interpretTargetLang || 'en',
+    sourceLang: () => (settings.language === 'auto' ? undefined : settings.language),
+    onLevel: (rms) => setAudioLevel(rms),
+    onPhraseStart: () => {
+      // On passe en 'processing' pour que l'UI reflète l'activité TTS
+      // tant qu'une traduction au moins est en vol. Le retour à 'recording'
+      // se fera sur onPhraseDone (puisqu'on reste en capture continue).
+    },
+    onPhraseDone: (res) => {
+      if (res.ok) {
+        setLastTranscript(`${res.rawText}\n\n→ ${res.translatedText}`);
+        if (typeof res.ttfbMs === 'number') setLastTtfbMs(res.ttfbMs);
+        setLastLatencyMs(res.durationMs);
+        loadHistory();
+      } else {
+        setLastError(res.error || 'Erreur interprétation');
+      }
+    },
+    onError: (err) => {
+      console.warn('[continuous-interpreter]', err.message);
+    },
+  });
+
   const toggle = async () => {
     const current = recStateRef.current;
+    const useContinuous = settings.interpreterEnabled && settings.interpreterContinuous;
+
+    if (useContinuous) {
+      // Mode VAD continu : un seul clic lance la capture, un autre l'arrête.
+      if (current === 'recording') {
+        continuous.stop();
+        setRecState('idle');
+        setAudioLevel(0);
+      } else {
+        setLastError('');
+        setLastTranscript('');
+        setRecState('recording');
+        try {
+          await continuous.start();
+        } catch (err: any) {
+          setLastError(err?.message || String(err));
+          setRecState('error');
+        }
+      }
+      return;
+    }
+
+    // Mode classique / interprète non-continu : start/stop MediaRecorder unique.
     if (current === 'recording') {
       recorder.stop();
     } else if (current === 'idle' || current === 'error') {
@@ -134,6 +241,7 @@ export function MainView() {
           <ModePicker />
           <LanguagePicker />
           <TranslatePicker />
+          <InterpreterPicker />
         </div>
       </div>
 
@@ -181,10 +289,15 @@ export function MainView() {
             <div className="text-center min-h-[44px]">
               {recState === 'idle' && (
                 <>
-                  <div className="text-base font-medium">Prêt à vous écouter</div>
+                  <div className="text-base font-medium">
+                    {settings.interpreterEnabled ? 'Prêt à interpréter' : 'Prêt à vous écouter'}
+                  </div>
                   <div className="text-white/40 text-xs mt-0.5">
                     Cliquez ou appuyez sur <kbd className="px-1 py-0.5 rounded bg-white/10 text-white/70 text-[10px] border border-white/10 mx-1">Espace</kbd>
-                    {settings.translateTo && (
+                    {settings.interpreterEnabled && (
+                      <> · <Volume2 size={10} className="inline" /> Voix en <span className="text-emerald-300">{INTERPRETER_LANGUAGES.find((t) => t.code === settings.interpretTargetLang)?.label || settings.interpretTargetLang}</span></>
+                    )}
+                    {!settings.interpreterEnabled && settings.translateTo && (
                       <> · <Languages size={10} className="inline" /> Traduction: <span className="text-fuchsia-300">{TRANSLATE_TARGETS.find((t) => t.code === settings.translateTo)?.native}</span></>
                     )}
                   </div>
@@ -192,15 +305,32 @@ export function MainView() {
               )}
               {recState === 'recording' && (
                 <>
-                  <div className="text-base font-medium text-rose-300">Enregistrement…</div>
+                  <div className="text-base font-medium text-rose-300 flex items-center justify-center gap-2">
+                    {settings.interpreterEnabled && settings.interpreterContinuous && (
+                      <span className="badge" style={{
+                        background: 'rgba(244,63,94,0.15)',
+                        borderColor: 'rgba(244,63,94,0.5)',
+                        color: '#fda4af',
+                      }}>
+                        <Radio size={9} /> LIVE
+                      </span>
+                    )}
+                    {settings.interpreterEnabled
+                      ? (settings.interpreterContinuous ? 'Interprétation en continu…' : 'Écoute pour interprétation…')
+                      : 'Enregistrement…'}
+                  </div>
                   <div className="text-white/40 text-xs mt-0.5">Appuyez à nouveau pour arrêter</div>
                 </>
               )}
               {recState === 'processing' && (
                 <>
-                  <div className="text-base font-medium text-cyan-300">Transcription en cours…</div>
+                  <div className="text-base font-medium text-cyan-300">
+                    {settings.interpreterEnabled ? 'Traduction + synthèse vocale…' : 'Transcription en cours…'}
+                  </div>
                   <div className="text-white/40 text-xs mt-0.5">
-                    Whisper Turbo sur Groq{settings.translateTo && <> + traduction</>}
+                    {settings.interpreterEnabled
+                      ? <>Whisper Turbo → Groq llama → {settings.ttsProvider}</>
+                      : <>Whisper Turbo sur Groq{settings.translateTo && <> + traduction</>}</>}
                   </div>
                 </>
               )}
@@ -227,10 +357,17 @@ export function MainView() {
         <div className="glass rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="label">Dernière transcription</span>
+              <span className="label">
+                {settings.interpreterEnabled ? 'Dernière interprétation' : 'Dernière transcription'}
+              </span>
               {lastLatencyMs > 0 && (
                 <span className="badge badge-green">
                   <Zap size={9} /> {lastLatencyMs}ms
+                </span>
+              )}
+              {settings.interpreterEnabled && lastTtfbMs > 0 && (
+                <span className="badge badge-green" style={{ borderColor: 'rgba(16,185,129,0.35)' }}>
+                  <Volume2 size={9} /> voix {lastTtfbMs}ms
                 </span>
               )}
             </div>
@@ -308,6 +445,69 @@ function TranslatePicker() {
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+/**
+ * Combined toggle + target-language picker for the voice interpreter.
+ *
+ * When OFF, the chip acts as a one-click "Activer l'interprète" toggle
+ * and shows just the speaker icon. When ON, it expands with a select
+ * for the target language so the user can tune it without opening
+ * SettingsView. The 4 dictation modes keep working either way — this
+ * is a routing toggle, not a replacement for the mode picker.
+ */
+function InterpreterPicker() {
+  const { settings, updateSettings } = useStore();
+  const active = !!settings.interpreterEnabled;
+  return (
+    <label
+      className={`picker-chip ${active ? 'is-active' : ''}`}
+      title={active
+        ? 'Interprète vocal actif — la traduction sera vocalisée'
+        : 'Activer le mode interprète vocal'}
+      style={active ? {
+        borderColor: 'rgba(16,185,129,0.45)',
+        background: 'rgba(16,185,129,0.12)',
+      } : undefined}
+    >
+      <Volume2 size={12} className="picker-chip-icon" style={active ? { color: '#6ee7b7' } : undefined} />
+      {active ? (
+        <select
+          value={settings.interpretTargetLang || 'en'}
+          onChange={(e) => updateSettings({ interpretTargetLang: e.target.value })}
+          style={{ color: '#6ee7b7' }}
+        >
+          {INTERPRETER_LANGUAGES.map((t) => (
+            <option key={t.code} value={t.code}>→ {t.label}</option>
+          ))}
+        </select>
+      ) : (
+        <button
+          type="button"
+          onClick={() => updateSettings({ interpreterEnabled: true })}
+          style={{
+            background: 'transparent', border: 'none', color: 'inherit',
+            font: 'inherit', cursor: 'pointer', padding: 0,
+          }}
+        >
+          Interprète vocal
+        </button>
+      )}
+      {active && (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); updateSettings({ interpreterEnabled: false }); }}
+          title="Désactiver l'interprète vocal"
+          style={{
+            background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)',
+            font: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+      )}
     </label>
   );
 }

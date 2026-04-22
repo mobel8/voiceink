@@ -132,6 +132,20 @@ export interface WidgetBounds {
   y: number;
 }
 
+/**
+ * TTS providers for the voice interpreter feature. Each one exposes an
+ * MP3 streaming endpoint so the renderer can start playback before the
+ * full utterance is synthesised. See `src/main/engines/tts/*.ts`.
+ *
+ *   - cartesia    : Sonic-2 via WebSocket. Cheapest (~$0.015/1k chars),
+ *                   lowest TTFB (~40ms), high-quality voice cloning.
+ *   - elevenlabs  : Flash v2.5 via HTTP chunked. Highest perceived
+ *                   naturalness (~$0.30/1k chars), ~75ms TTFB.
+ *   - openai      : gpt-4o-mini-tts via HTTP chunked. 50+ languages,
+ *                   moderate naturalness (~$0.015/1k chars).
+ */
+export type TTSProvider = 'cartesia' | 'elevenlabs' | 'openai';
+
 export interface Settings {
   groqApiKey: string;
   sttModel: string;       // groq whisper model id
@@ -164,6 +178,39 @@ export interface Settings {
   startMinimized: boolean;
   /** Play subtle audio cues on start/stop/done. */
   soundsEnabled: boolean;
+
+  // --- Voice interpreter ------------------------------------------------
+  /**
+   * When enabled, the primary record button routes through the
+   * interpreter pipeline (Whisper → translate → TTS) instead of the
+   * classic dictation pipeline (Whisper → LLM post-process → clipboard).
+   * Independent of `mode` — the 4 dictation modes keep working when
+   * this toggle is OFF.
+   */
+  interpreterEnabled: boolean;
+  /**
+   * Target language (ISO 639-1) for the interpreter. When empty, falls
+   * back to `translateTo`, then to a safe default ('en').
+   */
+  interpretTargetLang: string;
+  /**
+   * Continuous mode — enables VAD-based chunking so the interpreter can
+   * start speaking the translation while the user is still talking.
+   * Off by default (single push-to-stop, then one utterance).
+   */
+  interpreterContinuous: boolean;
+  /** TTS provider used by the interpreter. */
+  ttsProvider: TTSProvider;
+  /** Per-provider voice ID. Keyed by provider so users can pick a voice per brand. */
+  ttsVoiceId: Partial<Record<TTSProvider, string>>;
+  /** Per-provider API keys. Keyed by provider. */
+  ttsApiKey: Partial<Record<TTSProvider, string>>;
+  /**
+   * Pronunciation speed multiplier. 1.0 = natural. Applied server-side
+   * when the provider supports it (ElevenLabs `speed` param, Cartesia
+   * `speed`), otherwise ignored.
+   */
+  ttsSpeed: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -199,6 +246,20 @@ export const DEFAULT_SETTINGS: Settings = {
   autoStart: false,
   startMinimized: false,
   soundsEnabled: false,
+  interpreterEnabled: false,
+  interpretTargetLang: 'en',
+  interpreterContinuous: false,
+  ttsProvider: 'cartesia',
+  ttsVoiceId: {
+    // Sonic-2 "Professional Woman" — multilingual, natural warmth.
+    cartesia: '794f9389-aac1-45b6-b726-9d9369183238',
+    // ElevenLabs "Rachel" — premade voice, works in 32 languages.
+    elevenlabs: '21m00Tcm4TlvDq8ikWAM',
+    // OpenAI "alloy" — neutral, balanced.
+    openai: 'alloy',
+  },
+  ttsApiKey: {},
+  ttsSpeed: 1.0,
 };
 
 export interface HistoryEntry {
@@ -246,8 +307,59 @@ export interface TranscribeResponse {
   error?: string;
 }
 
+/**
+ * Interpreter request — same audio payload as a normal transcription
+ * but signals the main process to route through the TTS pipeline and
+ * stream audio chunks back over `IPC.ON_INTERPRET_CHUNK`. The renderer
+ * assembles those chunks into a playable MP3 stream.
+ */
+export interface InterpretRequest {
+  /** Unique session id so the renderer can correlate inbound chunks. */
+  requestId: string;
+  audioBase64: string;
+  mimeType: string;
+  /** Source language (ISO 639-1). 'auto' or empty → let Whisper detect. */
+  sourceLang?: string;
+  /** Target language (ISO 639-1). */
+  targetLang: string;
+}
+
+export interface InterpretResponse {
+  ok: boolean;
+  requestId: string;
+  /** The transcribed (source-language) text. */
+  rawText: string;
+  /** The translated (target-language) text fed to the TTS. */
+  translatedText: string;
+  detectedLanguage?: string;
+  durationMs: number;
+  /** Milliseconds between end-of-audio and first audio chunk emitted. */
+  ttfbMs?: number;
+  error?: string;
+}
+
+/**
+ * Audio chunk event pushed from main to renderer during an interpret
+ * session. The renderer assembles these in order (by `seq`) into an
+ * MP3 blob it pipes to the Web Audio API via MediaSource.
+ */
+export interface InterpretChunkEvent {
+  requestId: string;
+  seq: number;
+  /** Base64-encoded raw bytes of the MP3 chunk. */
+  chunkBase64: string;
+  /** MIME type of the chunk (`audio/mpeg` for all 3 providers). */
+  mime: string;
+  /** True when this is the final chunk of the session. */
+  done: boolean;
+  /** Terminal error if the stream aborted mid-flight. */
+  error?: string;
+}
+
 export const IPC = {
   TRANSCRIBE: 'voiceink:transcribe',
+  INTERPRET: 'voiceink:interpret',
+  ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
   GET_SETTINGS: 'voiceink:getSettings',
   SET_SETTINGS: 'voiceink:setSettings',
   GET_HISTORY: 'voiceink:getHistory',

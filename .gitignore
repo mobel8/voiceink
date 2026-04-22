@@ -10,6 +10,7 @@ Thumbs.db
 # Local dev / test helpers — never committed
 _*.bat
 _*.cmd
+_*.pid
 runtime.log
 tmp.cred
 cleanup.js

@@ -14,7 +14,7 @@
  * TypeScript types (and electron-store's merge) are for.
  */
 
-import { Settings, TranscribeRequest } from '../../shared/types';
+import { Settings, TranscribeRequest, InterpretRequest } from '../../shared/types';
 
 /** Upper bound on how big an audio payload we accept in a single IPC call. */
 const MAX_AUDIO_BASE64_LEN = 32 * 1024 * 1024; // ~24 MB decoded, enough for long dictations
@@ -85,6 +85,22 @@ export function validateTranscribeRequest(x: unknown): TranscribeRequest | null 
   return { audioBase64, mimeType, mode, language, translateTo };
 }
 
+/** Validate an interpreter request coming from the renderer. */
+export function validateInterpretRequest(x: unknown): InterpretRequest | null {
+  if (!isObject(x)) return null;
+  const audioBase64 = x.audioBase64;
+  if (!isString(audioBase64) || audioBase64.length === 0) return null;
+  if (audioBase64.length > MAX_AUDIO_BASE64_LEN) return null;
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(audioBase64)) return null;
+  const mimeType = isString(x.mimeType) ? x.mimeType.slice(0, 64) : 'audio/webm';
+  const requestId = clampString(x.requestId, 64) || '';
+  if (!requestId) return null;
+  const targetLang = clampString(x.targetLang, 16) || '';
+  if (!targetLang) return null;
+  const sourceLang = clampString(x.sourceLang, 16);
+  return { requestId, audioBase64, mimeType, sourceLang, targetLang };
+}
+
 /** Clamp an arbitrary text string (clipboard / injection). */
 export function validateText(x: unknown): string | null {
   if (!isString(x)) return null;
@@ -116,6 +132,8 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     ['shortcutPTT', 128],
     ['themeId', 64],
     ['density', 16],
+    ['interpretTargetLang', 16],
+    ['ttsProvider', 32],
   ];
   for (const [k, max] of stringFields) {
     const v = clampString(p[k as string], max);
@@ -133,9 +151,16 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     'replacementsEnabled',
     'startMinimized',
     'soundsEnabled',
+    'interpreterEnabled',
+    'interpreterContinuous',
   ];
   for (const k of boolFields) {
     if (isBoolean(p[k as string])) (out as any)[k] = p[k as string];
+  }
+
+  // Numbers
+  if (isNumber(p.ttsSpeed)) {
+    out.ttsSpeed = Math.max(0.25, Math.min(4.0, p.ttsSpeed));
   }
 
   // Structured fields — pass through as-is if shape looks plausible.
@@ -145,6 +170,33 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
   if (isObject(p.themeEffects)) out.themeEffects = p.themeEffects as any;
   if (isObject(p.widgetBounds)) out.widgetBounds = p.widgetBounds as any;
   else if (p.widgetBounds === null) out.widgetBounds = null;
+
+  // TTS voice ids and API keys — keyed by provider. Sanitize each entry.
+  if (isObject(p.ttsVoiceId)) {
+    const v: Partial<Record<string, string>> = {};
+    for (const k of Object.keys(p.ttsVoiceId)) {
+      if (k === 'cartesia' || k === 'elevenlabs' || k === 'openai') {
+        const val = clampString((p.ttsVoiceId as any)[k], 128);
+        if (val !== undefined) v[k] = val;
+      }
+    }
+    out.ttsVoiceId = v as any;
+  }
+  if (isObject(p.ttsApiKey)) {
+    const v: Partial<Record<string, string>> = {};
+    for (const k of Object.keys(p.ttsApiKey)) {
+      if (k === 'cartesia' || k === 'elevenlabs' || k === 'openai') {
+        const val = clampString((p.ttsApiKey as any)[k], MAX_KEY_LEN);
+        if (val !== undefined) v[k] = val;
+      }
+    }
+    out.ttsApiKey = v as any;
+  }
+
+  // Enforce ttsProvider enum.
+  if (out.ttsProvider && !['cartesia', 'elevenlabs', 'openai'].includes(out.ttsProvider)) {
+    delete out.ttsProvider;
+  }
 
   // Enforce the density enum explicitly (several code paths branch on it).
   if (out.density && out.density !== 'compact' && out.density !== 'comfortable') {
